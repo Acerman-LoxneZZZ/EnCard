@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-27T20:34:32.169Z",
+  "title": "Design System: Wordflow",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Тёмный фон"
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Основной текст"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Второстепенный текст"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Лавандовый акцент"
+      },
+      "known": {
+        "displayName": "Знаю"
+      },
+      "unknown": {
+        "displayName": "Не знаю"
+      },
+      "difficult": {
+        "displayName": "Трудно"
+      }
+    },
+    "typographyMeta": {
+      "word": {
+        "displayName": "Английское слово",
+        "purpose": "DM Serif Display используется только для английского слова."
+      },
+      "body": {
+        "displayName": "Интерфейс",
+        "purpose": "Manrope — для русского интерфейса, переводов и примеров."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-surface",
+        "value": "inset 0 1px 0 #efdbff2b, inset 1px 0 0 #d4c0ff12, inset 0 -1px 0 #ffffff0c, 0 24px 60px #00000050",
+        "purpose": "Рефлексы и нижняя тень активной карточки (.face)."
+      },
+      {
+        "name": "deck-bottom",
+        "value": "inset 0 -1px 0 #b6c8f21a, 0 25px 40px #00000030",
+        "purpose": "Нижний декоративный лист стопки (.deck::before)."
+      },
+      {
+        "name": "answer-known-hover",
+        "value": "0 7px 22px #91d9ba10",
+        "purpose": "Наведение на ответ «Знаю»."
+      },
+      {
+        "name": "answer-unknown-hover",
+        "value": "0 7px 22px #f2a3b00c",
+        "purpose": "Наведение на ответ «Не знаю»."
+      },
+      {
+        "name": "answer-difficult-hover",
+        "value": "0 7px 22px #edc48c0c",
+        "purpose": "Наведение на ответ «Трудно»."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "CSS-переменная --ease для перемещения карточки, наклона, стопки и прогресса."
+      },
+      {
+        "name": "card-flip",
+        "value": "transform .58s cubic-bezier(.2,.7,.2,1)",
+        "purpose": "Переворот .card-inner."
+      },
+      {
+        "name": "answer-transition",
+        "value": "background .2s, transform .2s, box-shadow .2s",
+        "purpose": "Состояния кнопок ответов."
+      },
+      {
+        "name": "ambient-left",
+        "value": "23s ease-in-out infinite alternate",
+        "purpose": "Декоративное движение левого фонового пятна."
+      },
+      {
+        "name": "ambient-right",
+        "value": "29s ease-in-out infinite alternate",
+        "purpose": "Декоративное движение правого фонового пятна."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "(prefers-reduced-motion: reduce)",
+        "purpose": "Отключает анимации, переходы, наклон и конфетти. Выключатель эффектов дополнительно останавливает фон и переходы карточки и прогресса."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "(max-width: 360px)"
+      },
+      {
+        "name": "mobile",
+        "value": "(max-width: 600px)"
+      },
+      {
+        "name": "large-screen",
+        "value": "(min-width: 1500px) and (min-height: 850px)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Не знаю",
+      "kind": "button",
+      "description": "Возвращает слово в конец колоды. Образец внешнего вида без логики сессии.",
+      "html": "<button type=\"button\" class=\"ds-answer-no\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m6 6 12 12M6 18 18 6\"/></svg>Не знаю</button>",
+      "css": ".ds-answer-no { display:flex; align-items:center; justify-content:center; gap:9px; min-height:58px; padding:12px; border:1px solid #f2a3b022; border-radius:16px; font:600 14px/1.5 'Manrope','Segoe UI',sans-serif; color:var(--red,#f2a3b0); background:#f2a3b009; cursor:pointer; transition:background .2s,transform .2s,box-shadow .2s; } .ds-answer-no:hover:not(:disabled) { transform:translateY(-2px); background:#f2a3b015; box-shadow:0 7px 22px #f2a3b00c; } .ds-answer-no:active:not(:disabled) { transform:translateY(1px) scale(.98); } .ds-answer-no:disabled { opacity:.35; cursor:default; } .ds-answer-no:focus-visible { outline:2px solid var(--accent,#c4b6f5); outline-offset:5px; } .ds-answer-no svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } @media(prefers-reduced-motion:reduce) { .ds-answer-no { transition:none; } }"
+    },
+    {
+      "name": "Трудно",
+      "kind": "button",
+      "description": "Помещает слово после трёх других карточек, либо в конец короткой колоды. Образец внешнего вида без логики сессии.",
+      "html": "<button type=\"button\" class=\"ds-answer-hard\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 3h8M8 21h8M7 3v4l10 10v4M17 3v4L7 17v4\"/></svg>Трудно</button>",
+      "css": ".ds-answer-hard { display:flex; align-items:center; justify-content:center; gap:9px; min-height:58px; padding:12px; border:1px solid #edc48c22; border-radius:16px; font:600 14px/1.5 'Manrope','Segoe UI',sans-serif; color:var(--amber,#edc48c); background:#edc48c09; cursor:pointer; transition:background .2s,transform .2s,box-shadow .2s; } .ds-answer-hard:hover:not(:disabled) { transform:translateY(-2px); background:#edc48c15; box-shadow:0 7px 22px #edc48c0c; } .ds-answer-hard:active:not(:disabled) { transform:translateY(1px) scale(.98); } .ds-answer-hard:disabled { opacity:.35; cursor:default; } .ds-answer-hard:focus-visible { outline:2px solid var(--accent,#c4b6f5); outline-offset:5px; } .ds-answer-hard svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } @media(prefers-reduced-motion:reduce) { .ds-answer-hard { transition:none; } }"
+    },
+    {
+      "name": "Знаю",
+      "kind": "button",
+      "description": "Убирает слово из активной колоды и увеличивает прогресс. Образец внешнего вида без логики сессии.",
+      "html": "<button type=\"button\" class=\"ds-answer-yes\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg>Знаю</button>",
+      "css": ".ds-answer-yes { display:flex; align-items:center; justify-content:center; gap:9px; min-height:58px; padding:12px; border:1px solid #91d9ba30; border-radius:16px; font:600 14px/1.5 'Manrope','Segoe UI',sans-serif; color:var(--green,#91d9ba); background:#91d9ba13; cursor:pointer; transition:background .2s,transform .2s,box-shadow .2s; } .ds-answer-yes:hover:not(:disabled) { transform:translateY(-2px); background:#91d9ba20; box-shadow:0 7px 22px #91d9ba10; } .ds-answer-yes:active:not(:disabled) { transform:translateY(1px) scale(.98); } .ds-answer-yes:disabled { opacity:.35; cursor:default; } .ds-answer-yes:focus-visible { outline:2px solid var(--accent,#c4b6f5); outline-offset:5px; } .ds-answer-yes svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } @media(prefers-reduced-motion:reduce) { .ds-answer-yes { transition:none; } }"
+    },
+    {
+      "name": "Пройти заново",
+      "kind": "button",
+      "description": "Действие на экране завершения. Образец внешнего вида без сброса прогресса.",
+      "html": "<button type=\"button\" class=\"ds-restart\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 9a8 8 0 0 1 14-3l2 3M20 4v5h-5M20 15a8 8 0 0 1-14 3l-2-3m0 5v-5h5\"/></svg>Пройти заново</button>",
+      "css": ".ds-restart { display:flex; justify-content:center; align-items:center; gap:10px; width:100%; min-height:54px; padding:12px; border:0; border-radius:15px; background:var(--accent,#c4b6f5); color:#221c33; font:700 14px/1.5 'Manrope','Segoe UI',sans-serif; box-shadow:0 10px 30px #c4b6f512; cursor:pointer; } .ds-restart:hover { background:#d2c8f9; } .ds-restart:focus-visible { outline:2px solid var(--accent,#c4b6f5); outline-offset:5px; } .ds-restart svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }"
+    },
+    {
+      "name": "Поиск в словаре",
+      "kind": "input",
+      "description": "Поле поиска по слову или переводу. Образец поля без фильтрации словаря; отдельного оформления при наведении в источнике нет.",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m16 16 5 5\"/></svg><input type=\"search\" aria-label=\"Поиск по слову или переводу\" placeholder=\"Найти слово или перевод\" autocomplete=\"off\" spellcheck=\"false\"></label>",
+      "css": ".ds-search { position:relative; display:block; } .ds-search svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; } .ds-search svg { position:absolute; left:15px; top:15px; color:var(--muted,#a7a9bc); width:18px; height:18px; pointer-events:none; } .ds-search input { width:100%; height:48px; border:1px solid #ffffff16; border-radius:13px; background:#ffffff04; color:var(--text,#f4f2fa); padding:0 16px 0 44px; font:14px/1.5 'Manrope','Segoe UI',sans-serif; caret-color:var(--accent,#c4b6f5); } .ds-search input:hover { background:#ffffff04; } .ds-search input::placeholder { color:#9a98ae; } .ds-search input:focus-visible { outline:2px solid var(--accent,#c4b6f5); outline-offset:3px; }"
+    },
+    {
+      "name": "Лицевая сторона карточки",
+      "kind": "card",
+      "description": "Русский перевод без подсказки. Первая английская буква появляется только при возвращении после «Трудно». Следующая карточка поднимается из стопки; анимация ограничена областью приложения.",
+      "html": "<article class=\"ds-study-card\"><span class=\"ds-card-language\">Русский</span><button class=\"ds-recall\" aria-label=\"Открывать, узнавать. Показать английское слово\"><span>открывать, узнавать</span></button></article>",
+      "css": ".ds-study-card{min-height:333px;border-radius:24px;padding:24px;background:linear-gradient(130deg,#292c3b,#1c212d 72%,#242735);box-shadow:inset 0 1px 0 #efdbff2b,0 24px 60px #00000050;font-family:Manrope,sans-serif;color:#f4f2fa;display:flex;flex-direction:column}.ds-card-language{font-size:12px;color:#aaa9bc}.ds-recall{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:13px;background:transparent;border:0;padding:25px 10px;color:inherit;font:500 36px/1.2 Manrope,sans-serif;cursor:pointer}.ds-recall small{font-size:20px;color:#c4b6f5}.ds-recall:hover{color:#fff}.ds-recall:focus-visible{outline:2px solid #c4b6f5;outline-offset:3px;border-radius:12px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "",
+    "overview": "Главный предмет интерфейса — осязаемая карточка со словом. Окружение тихое,\nинструменты второстепенны. Свет и наклон проявляют поверхность карточки,\nцвет ответа объясняет её движение. Направление реализовано по прямому запросу\nпользователя на минимализм, 3D, свечение и движущиеся эффекты.",
+    "keyCharacteristics": [],
+    "rules": [],
+    "dos": [
+      "Сохранять один визуальный фокус: слово на карточке.",
+      "Любое состояние отображать текстом, а не только цветом.",
+      "Уважать prefers-reduced-motion и выключатель эффектов."
+    ],
+    "donts": [
+      "Не воспроизводить звуки без действия пользователя.",
+      "Не добавлять обязательные сетевые зависимости в HTML.",
+      "Не считать автоматические проверки подтверждением визуальной проверки."
+    ]
+  }
+}

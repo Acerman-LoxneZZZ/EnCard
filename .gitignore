@@ -1,0 +1,5 @@
+# Local Impeccable preferences and generated verification dependencies.
+.impeccable/config.local.json
+.impeccable/review/runtime/node_modules/
+.impeccable/review/before-enhancement.html
+.impeccable/build/*.ttf
