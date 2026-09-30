@@ -5,8 +5,8 @@ const vm = require('node:vm');
 const html = fs.readFileSync('index.html','utf8');
 new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
 let passed = 0;
-function setup({saved=null,custom=null,storageFails=false,reduced=false,remote=false}={}) {
-  const timers = new Map(), failures = [], media = [], utterances = [], recordings = [];
+function setup({saved=null,custom=null,dictionaries=null,storageFails=false,reduced=false,remote=false}={}) {
+  const timers = new Map(), failures = [], media = [], utterances = [], recordings = [], requests = [];
   let serial = 0;
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError',e=>failures.push(e.message));
@@ -21,26 +21,183 @@ function setup({saved=null,custom=null,storageFails=false,reduced=false,remote=f
     w.speechSynthesis={getVoices:()=>[{lang:'en-GB'}],cancel:()=>{},speak:u=>utterances.push(u)};
     w.SpeechSynthesisUtterance=class{constructor(text){this.text=text;}};
     if(remote){
-      w.fetch=async url=>({ok:true,json:async()=>String(url).includes('tatoeba.org')
-        ? {data:[{id:12768916,text:'In stillness, we thrive.'}]}
-        : {query:{pages:{'1':{title:'File:En-us-thrive.ogg',imageinfo:[{url:'https://upload.wikimedia.org/wikipedia/commons/thrive.ogg',descriptionurl:'https://commons.wikimedia.org/wiki/File:En-us-thrive.ogg',extmetadata:{Artist:{value:'Dvortygirl'},LicenseShortName:{value:'CC BY-SA 3.0'}}}]}}}}});
+      w.fetch=async url=>{requests.push(String(url));return {ok:true,json:async()=>({query:{pages:{'1':{title:'File:En-us-thrive.ogg',imageinfo:[{url:'https://upload.wikimedia.org/wikipedia/commons/thrive.ogg',descriptionurl:'https://commons.wikimedia.org/wiki/File:En-us-thrive.ogg',extmetadata:{Artist:{value:'Dvortygirl'},LicenseShortName:{value:'CC BY-SA 3.0'}}}]}}}})};};
       w.Audio=class{constructor(url){this.url=url;}play(){recordings.push(this.url);return Promise.resolve();}pause(){}removeAttribute(){}load(){}};
     }
     if(saved)w.localStorage.setItem('wordflow.session.v1',JSON.stringify(saved));
     if(custom)w.localStorage.setItem('wordflow.custom-words.v1',JSON.stringify(custom));
+    if(dictionaries)w.localStorage.setItem('wordflow.collections.v1',JSON.stringify(dictionaries));
     if(storageFails)Object.defineProperty(w,'localStorage',{get(){throw Error('Storage denied');}});
   }});
   const w=dom.window,d=w.document;
   const el=id=>d.getElementById(id),run=code=>w.eval(code),state=()=>JSON.parse(run('JSON.stringify(state)'));
-  const flush=()=>{for(const [id,t] of [...timers])if(t.delay<=400){timers.delete(id);t.fn();}};
+  const flush=()=>{for(const [id,t] of [...timers])if(t.delay<=650){timers.delete(id);t.fn();}};
   const click=id=>el(id).click();
   const rate=kind=>{d.querySelector(`[data-answer="${kind}"]`).click();flush();};
   const key=(code,target=d.body)=>target.dispatchEvent(new w.KeyboardEvent('keydown',{code,key:code==='Escape'?'Escape':code,bubbles:true}));
   const pointer=(type,x,y=100,id=1)=>{const event=new w.Event(type,{bubbles:true});Object.assign(event,{isPrimary:true,button:0,pointerId:id,clientX:x,clientY:y,pointerType:'mouse'});el('front-flip').dispatchEvent(event);};
   assert.deepEqual(failures,[],'no script/runtime exceptions');
-  return {w,d,el,run,state,flush,click,rate,key,pointer,failures,utterances,recordings,media,close:()=>w.close()};
+  return {w,d,el,run,state,flush,click,rate,key,pointer,failures,utterances,recordings,requests,media,close:()=>w.close()};
 }
 function test(name,fn){fn();passed++;console.log('PASS '+name);}
+function submit(t,id){t.el(id).dispatchEvent(new t.w.Event('submit',{bubbles:true,cancelable:true}));}
+function createDictionary(t,name){t.click('new-collection');t.el('collection-name').value=name;submit(t,'collection-editor');return t.el('collection-select').value;}
+function chooseDictionary(t,id){t.click('collection-select');const option=t.el('dictionary-menu').querySelector(`[data-collection-id="${id}"]`);assert.ok(option);option.click();}
+function pickWord(t,id){const input=t.el('picker-list').querySelector(`input[value="${id}"]`);assert.ok(input,'word available in picker');input.checked=true;input.dispatchEvent(new t.w.Event('change',{bubbles:true}));}
+
+test('dictionary menu stays selectable through browser scroll and viewport resize',()=>{
+ const t=setup();t.click('open-library');createDictionary(t,'Мой словарь');t.click('open-word-picker');pickWord(t,0);t.click('add-picked');t.click('study-collection');
+ let pageScrollCalls=0;t.w.HTMLElement.prototype.scrollIntoView=()=>{pageScrollCalls++;t.w.dispatchEvent(new t.w.Event('scroll'));};
+ t.click('active-collection');
+ for(const event of ['scroll','resize','scroll'])t.w.dispatchEvent(new t.w.Event(event));
+ assert.equal(t.el('dictionary-menu').hidden,false);assert.equal(t.el('active-collection').getAttribute('aria-expanded'),'true');assert.equal(pageScrollCalls,0);
+ const option=t.el('dictionary-menu').querySelector('[data-collection-id="all"]');
+ option.dispatchEvent(new t.w.Event('pointerdown',{bubbles:true}));option.focus();option.dispatchEvent(new t.w.Event('pointerup',{bubbles:true}));option.click();
+ assert.equal(t.el('active-collection-name').textContent,'Общий словарь');assert.equal(t.el('dictionary-menu').hidden,true);assert.equal(t.state().queue.length,20);t.close();
+});
+
+test('examples and sample placeholders are absent, including legacy custom-word content',()=>{
+ const t=setup({custom:[{en:'thrive',ru:'процветать',example:'Legacy sentence.',exampleSource:'https://tatoeba.org/1'}]});
+ assert.equal(t.d.querySelector('#example, #example-ru, #example-source'),null);
+ for(const id of ['custom-en','custom-ru','collection-name'])assert.equal(t.el(id).hasAttribute('placeholder'),false);
+ assert.equal(t.el('back-flip').getAttribute('aria-describedby'),'back-hint');
+ assert.equal(t.run('typeof lookupExample'),'undefined');assert.equal(t.run('WORDS.some(word => Boolean(word.example))'),false);
+ t.click('front-flip');t.click('word-sound');assert.equal(t.utterances.at(-1).text,'discover');t.close();
+});
+
+test('custom dictionary chooser supports keyboard, dismissal and narrow viewport bounds',()=>{
+ const t=setup();t.click('open-library');const id=createDictionary(t,'Работа');
+ assert.equal(t.el('collection-select').tagName,'BUTTON');
+ t.click('collection-select');assert.equal(t.el('dictionary-menu').hidden,false);assert.equal(t.el('collection-select').getAttribute('aria-expanded'),'true');
+ assert.equal(t.d.activeElement.dataset.collectionId,id);assert.equal(t.d.activeElement.getAttribute('aria-selected'),'true');
+ const key=key=>t.d.activeElement.dispatchEvent(new t.w.KeyboardEvent('keydown',{key,code:key,bubbles:true,cancelable:true}));
+ key('Home');assert.equal(t.d.activeElement.dataset.collectionId,'all');key('End');assert.equal(t.d.activeElement.dataset.collectionId,id);
+ key('Escape');assert.equal(t.el('dictionary-menu').hidden,true);assert.equal(t.d.activeElement.id,'collection-select');assert.equal(t.el('library').hidden,false);
+ key('ArrowDown');assert.equal(t.el('dictionary-menu').hidden,false);key('Tab');assert.equal(t.el('dictionary-menu').hidden,true);
+ Object.defineProperty(t.w,'innerWidth',{value:320,configurable:true});t.click('collection-select');
+ assert.ok(parseFloat(t.el('dictionary-menu').style.width)<=288);assert.ok(parseFloat(t.el('dictionary-menu').style.left)>=16);
+ t.d.body.dispatchEvent(new t.w.Event('pointerdown',{bubbles:true}));assert.equal(t.el('dictionary-menu').hidden,true);t.close();
+});
+
+test('study chip switches dictionaries directly and preserves finished and unfinished progress',()=>{
+ const t=setup();t.click('open-library');const id=createDictionary(t,'Работа');t.click('open-word-picker');pickWord(t,0);pickWord(t,1);t.click('add-picked');t.click('study-collection');t.rate('yes');const progress=t.state();
+ const quick=id=>{t.click('active-collection');t.el('dictionary-menu').querySelector(`[data-collection-id="${id}"]`).click();};
+ quick('all');assert.equal(t.el('library').hidden,true);assert.equal(t.el('active-collection').hidden,false);assert.equal(t.state().queue.length,20);
+ quick(id);assert.deepEqual(t.state(),progress);assert.equal(t.el('library').hidden,true);
+ t.rate('yes');assert.equal(t.el('finish').hidden,false);quick('all');quick(id);
+ assert.equal(t.el('finish').hidden,false,'quick selection never resets a completed dictionary');assert.deepEqual(t.state().learned,[0,1]);
+ t.click('open-library');const empty=createDictionary(t,'Пустой');t.click('close-library');quick(empty);
+ assert.equal(t.el('library').hidden,false);assert.equal(t.el('collection-select').value,empty);assert.equal(t.el('study-collection').disabled,true);t.close();
+});
+
+test('screen navigation settles once, supports interruption and respects reduced motion',()=>{
+ const t=setup(), animations=[];
+ t.el('screen-stage').animate=(frames,options)=>{const a={frames,options,cancelled:false,onfinish:null,cancel(){this.cancelled=true;}};animations.push(a);return a;};
+ t.click('open-library');assert.equal(t.el('screen-stage').inert,true);assert.equal(t.el('library').hidden,true);assert.equal(animations.length,1);
+ t.key('ArrowRight');assert.equal(t.state().attempts,0);t.click('open-library');assert.equal(animations.length,1);
+ animations[0].onfinish();assert.equal(t.el('screen-stage').inert,false);assert.equal(t.el('library').hidden,false);assert.equal(t.d.activeElement.id,'library-title');
+ t.click('close-library');assert.equal(animations[1].cancelled,true);assert.equal(animations[1].onfinish,null);assert.equal(t.el('screen-stage').inert,true);
+ t.media[0].matches=true;t.media[0].listener();assert.equal(animations[2].cancelled,true);assert.equal(t.el('screen-stage').inert,false);assert.equal(t.el('library').hidden,true);
+ const count=animations.length;t.click('open-library');assert.equal(t.el('library').hidden,false);assert.equal(animations.length,count);
+ assert.deepEqual(t.failures,[]);t.close();
+});
+
+test('named dictionaries persist separate progress and preserve the legacy general session',()=>{
+ const t=setup();t.rate('yes');const general=t.state();t.click('open-library');
+ const id=createDictionary(t,'Путешествия');assert.notEqual(id,'all');assert.equal(t.el('study-collection').disabled,true);assert.equal(t.el('word-list').children.length,0);
+ t.click('open-word-picker');pickWord(t,0);pickWord(t,1);t.click('add-picked');
+ assert.equal(t.el('word-list').children.length,2);assert.equal(t.el('study-collection').disabled,false);
+ t.click('study-collection');assert.equal(t.el('library').hidden,true);assert.deepEqual(t.state().queue,[0,1]);assert.equal(t.el('learned-count').textContent,'0 из 2');
+ t.rate('hard');t.rate('yes');assert.deepEqual(t.state().queue,[0]);assert.deepEqual(t.state().hinted,[0]);
+ assert.deepEqual(JSON.parse(t.w.localStorage.getItem('wordflow.session.v1')),general);
+ const persisted=JSON.parse(t.w.localStorage.getItem('wordflow.collections.v1'));
+ const restored=setup({saved:general,dictionaries:persisted});
+ assert.equal(restored.el('active-collection-name').textContent,'Путешествия');assert.deepEqual(restored.state(),t.state());assert.equal(restored.el('letter-hint').textContent,'d…');
+ restored.click('open-library');chooseDictionary(restored,'all');restored.click('study-collection');assert.deepEqual(restored.state(),general);
+ restored.click('open-library');chooseDictionary(restored,id);restored.click('study-collection');restored.rate('yes');
+ assert.equal(restored.el('finish').hidden,false);assert.equal(restored.el('easy-count').textContent,'1');assert.equal(restored.el('hard-count').textContent,'1');
+ restored.click('restart');assert.deepEqual(restored.state().queue,[0,1]);assert.equal(restored.state().attempts,0);
+ t.close();restored.close();
+});
+
+test('new words live in general and selected dictionary; existing words are shared without duplicates',()=>{
+ const t=setup();t.click('open-library');const first=createDictionary(t,'Работа');
+ t.el('custom-en').value='thrive';t.el('custom-ru').value='процветать';submit(t,'add-word-form');
+ assert.equal(t.el('word-list').children.length,1);assert.match(t.el('word-list').textContent,/thrive/);
+ assert.equal(t.run('WORDS.length'),21);assert.deepEqual(JSON.parse(t.run('JSON.stringify(collectionWordIds("all"))')),Array.from({length:21},(_,i)=>i));
+ const second=createDictionary(t,'Личное');t.el('custom-en').value='THRIVE';t.el('custom-ru').value='другой перевод';submit(t,'add-word-form');
+ assert.equal(t.run('WORDS.length'),21);assert.match(t.el('word-list').textContent,/процветать/);
+ t.click('study-collection');assert.deepEqual(t.state().queue,[20]);t.click('front-flip');t.click('word-sound');assert.equal(t.utterances.at(-1).text,'thrive');
+ t.click('open-library');t.d.querySelector('.remove-membership').click();assert.equal(t.el('word-list').children.length,0);assert.equal(t.el('study-collection').disabled,true);
+ t.click('close-library');assert.equal(t.el('library').hidden,false,'empty active deck stays editable');
+ chooseDictionary(t,first);assert.equal(t.el('word-list').children.length,1);
+ chooseDictionary(t,'all');assert.equal(t.el('word-list').children.length,21);
+ const dictionaries=JSON.parse(t.w.localStorage.getItem('wordflow.collections.v1'));
+ const saved=JSON.parse(t.w.localStorage.getItem('wordflow.session.v1')),custom=JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1'));
+ const restored=setup({dictionaries,saved,custom});assert.equal(restored.el('library').hidden,false);assert.equal(restored.el('collection-select').value,second);
+ chooseDictionary(restored,first);assert.match(restored.el('word-list').textContent,/thrive/);assert.equal(restored.run('WORDS.length'),21);
+ t.close();restored.close();
+});
+
+test('picker retains selections across search; rename is safe and does not reset progress',()=>{
+ const t=setup();t.click('open-library');const id=createDictionary(t,'Тема');t.click('open-word-picker');pickWord(t,0);
+ t.el('picker-search').value='journey';t.el('picker-search').dispatchEvent(new t.w.Event('input'));pickWord(t,1);
+ assert.match(t.el('add-picked').textContent,/2/);t.click('add-picked');t.click('study-collection');t.rate('yes');const progress=t.state();
+ t.click('open-library');t.click('rename-collection');t.el('collection-name').value='<img src=x onerror=alert(1)>';submit(t,'collection-editor');
+ assert.equal(t.el('collection-select').value,id);assert.equal(t.el('collection-title').textContent,'<img src=x onerror=alert(1)>');assert.equal(t.el('collection-title').children.length,0);
+ assert.deepEqual(t.state(),progress);t.click('new-collection');t.el('collection-name').value='<img src=x onerror=alert(1)>';submit(t,'collection-editor');
+ assert.match(t.el('toast').textContent,/уже есть/);assert.equal(t.run('collections.length'),1);
+ t.click('cancel-collection');t.click('open-word-picker');assert.equal(t.el('picker-list').querySelector('input[value="0"]'),null);assert.equal(t.el('picker-list').querySelector('input[value="1"]'),null);
+ t.close();
+});
+
+test('dictionary corruption and denied storage leave general words and progress usable',()=>{
+ const dictionaries={activeId:'deck-valid',items:[null,{id:'all',name:'Fake',wordIds:[]},{id:'deck-valid',name:'Saved',wordIds:[0,0,1,999,-1,'2']},{id:'deck-valid',name:'Duplicate',wordIds:[2]}],sessions:{'deck-valid':{queue:[0,0,999],learned:[1,999],difficult:[0,99],hinted:[0,999],attempts:3}}};
+ const t=setup({dictionaries});assert.deepEqual(t.state().queue,[0]);assert.deepEqual(t.state().learned,[1]);assert.deepEqual(t.state().hinted,[0]);assert.equal(t.run('collections.length'),1);
+ t.click('open-library');chooseDictionary(t,'all');assert.equal(t.el('word-list').children.length,20);t.close();
+ const denied=setup({storageFails:true});denied.click('open-library');createDictionary(denied,'Не сохранится');assert.equal(denied.run('collections.length'),0);assert.match(denied.el('toast').textContent,/Не удалось сохранить/);assert.equal(denied.el('word-list').children.length,20);denied.close();
+});
+
+test('two-stage flip hides underlying text, keeps audio attached and cancels safely',()=>{
+ const t=setup(), animations=[];
+ t.el('card-inner').animate=(frames,options)=>{
+   const animation={frames,options,onfinish:null,cancelled:false,cancel(){this.cancelled=true;}};
+   animations.push(animation);return animation;
+ };
+ const style=element=>t.w.getComputedStyle(element);
+ assert.equal(style(t.el('back')).display,'none');
+ assert.equal(style(t.el('queued-word')).visibility,'hidden');
+ assert.equal(style(t.d.querySelector('.deck-viewport')).overflow,'hidden');
+ assert.equal(style(t.d.querySelector('.deck-viewport')).contain,'paint');
+ assert.equal(style(t.el('card-inner')).height,'380px');
+ t.pointer('pointerdown',100);t.pointer('pointerup',100);
+ assert.equal(animations[0].options.duration,320);
+ assert.equal(t.el('front').getAttribute('aria-hidden'),'false','outgoing face stays visible until edge-on');
+ assert.equal(style(t.el('back')).display,'none');
+ assert.ok(t.el('deck').classList.contains('turning'));
+ t.pointer('pointerdown',100);t.pointer('pointerup',100);
+ assert.equal(animations.length,1,'second tap cannot restart a running flip');
+ animations[0].onfinish();
+ assert.equal(animations[1].options.duration,480);
+ assert.equal(style(t.el('front')).display,'none');
+ assert.equal(t.el('word-sound').hidden,false);
+ assert.equal(t.el('word-sound').closest('.face').id,'back');
+ assert.equal(style(t.el('queued-word')).visibility,'hidden');
+ animations[1].onfinish();
+ assert.equal(t.el('deck').classList.contains('turning'),false);
+ t.click('word-sound');assert.equal(t.utterances.at(-1).text,'discover');
+ assert.equal(t.el('back').getAttribute('aria-hidden'),'false');
+ t.click('back-flip');const interrupted=animations.at(-1);
+ t.rate('hard');assert.ok(interrupted.cancelled);assert.equal(interrupted.onfinish,null);
+ assert.equal(t.el('front').getAttribute('aria-hidden'),'false');
+ assert.equal(t.el('deck').classList.contains('turning'),false);
+ assert.equal(t.el('card').style.opacity,'1','card stays opaque over the next word');
+ t.click('front-flip');
+ t.media[0].matches=true;t.media[0].listener();
+ assert.equal(t.run('flipping'),false,'reduced motion settles a running flip');
+ assert.equal(t.el('back').getAttribute('aria-hidden'),'false');
+ assert.deepEqual(t.failures,[]);t.close();
+});
 
 test('complete DOM and accessible references',()=>{
  const t=setup();const ids=[...t.d.querySelectorAll('[id]')].map(e=>e.id);assert.equal(new Set(ids).size,ids.length);
@@ -50,7 +207,7 @@ test('complete DOM and accessible references',()=>{
  assert.ok(html.includes('data:font/ttf;base64,'));t.close();
 });
 test('unknown moves to end; input lock; undo is lossless',()=>{
- const t=setup();t.d.querySelector('[data-answer="no"]').click();t.d.querySelector('[data-answer="yes"]').click();assert.equal(t.state().attempts,1);t.flush();assert.equal(t.state().queue.at(-1),0);assert.equal(t.state().learned.length,0);
+ const t=setup();t.d.querySelector('[data-answer="no"]').click();t.d.querySelector('[data-answer="yes"]').click();assert.equal(t.state().attempts,1);assert.match(t.el('card').style.transition,/510ms/);assert.equal(t.el('deck').style.getPropertyValue('--exit-duration'),'510ms');t.flush();assert.equal(t.state().queue.at(-1),0);assert.equal(t.state().learned.length,0);
  t.click('undo');assert.equal(t.state().queue[0],0);assert.equal(t.state().attempts,0);assert.deepEqual(t.state().difficult,[]);assert.equal(t.el('undo').disabled,true);t.close();
 });
 test('hard repeats after three other cards; completion stats and undo',()=>{
@@ -85,6 +242,7 @@ test('Russian-first recall, live next-card stack and downward hard swipe',()=>{
  assert.equal(t.el('queued-word').textContent,'путешествие');assert.equal(t.el('queued-card').getAttribute('aria-hidden'),'true');
  assert.ok(!t.el('announcement').textContent.includes('discover'));assert.equal(t.d.querySelector('.key-hints'),null);assert.equal(t.d.querySelector('.page-footer'),null);assert.equal(t.el('session-feedback'),null);
  t.pointer('pointerdown',100,100);t.pointer('pointermove',108,260);t.pointer('pointerup',108,260);
+ assert.match(t.el('card').style.transition,/600ms/);
  assert.equal(t.state().queue[3],0);assert.equal(t.el('queued-word').textContent,'путешествие');assert.ok(t.el('deck').classList.contains('advancing'));assert.match(t.el('card').style.transform,/translate3d\(0,/);
  t.flush();assert.equal(t.el('translation').textContent,'путешествие');assert.equal(t.el('letter-hint').hidden,true);assert.equal(t.el('letter-hint').textContent,'');assert.equal(t.el('queued-word').textContent,'замечать');
  for(let i=0;i<3;i++)t.rate('yes');assert.equal(t.state().queue[0],0);assert.equal(t.el('translation').textContent,'открывать, узнавать');
@@ -153,13 +311,14 @@ async function remoteIntegration() {
  t.el('add-word-form').dispatchEvent(new t.w.Event('submit',{bubbles:true,cancelable:true}));
  await new Promise(resolve=>setImmediate(resolve));
  const word=JSON.parse(t.run('JSON.stringify(WORDS.at(-1))'));
- assert.equal(word.example,'In stillness, we thrive.');assert.match(word.audioUrl,/upload\.wikimedia\.org/);
- assert.equal(JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1'))[0].example,word.example);
+ assert.equal(word.example,undefined);assert.match(word.audioUrl,/upload\.wikimedia\.org/);
+ assert.equal(JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1'))[0].audioUrl,word.audioUrl);
+ assert.ok(t.requests.length>0);assert.ok(t.requests.every(url=>url.startsWith('https://commons.wikimedia.org/')),'only pronunciation metadata is requested');
  t.click('close-library');for(let i=0;i<20;i++)t.rate('yes');
- assert.equal(t.el('example').textContent,word.example);assert.equal(t.el('audio-credit').hidden,false);
+ assert.equal(t.el('example'),null);assert.equal(t.el('audio-credit').hidden,false);
  t.click('front-flip');t.flush();t.click('word-sound');await new Promise(resolve=>setImmediate(resolve));
  assert.equal(t.recordings.at(-1),word.audioUrl);assert.equal(t.utterances.length,0);
- assert.deepEqual(t.failures,[]);t.close();passed++;console.log('PASS remote example, recording and persisted metadata');
+ assert.deepEqual(t.failures,[]);t.close();passed++;console.log('PASS remote recording and persisted metadata without sentence requests');
  console.log(`\n${passed} integration groups passed. DOM/logic checks only; no browser rendering or real audio claimed.`);
 }
 remoteIntegration().catch(error=>{console.error(error);process.exitCode=1;});

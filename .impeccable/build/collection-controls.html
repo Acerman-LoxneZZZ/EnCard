@@ -1,0 +1,24 @@
+<div class="collection-toolbar">
+  <div class="collection-select-label"><button type="button" id="collection-select" class="dictionary-trigger" value="all" aria-label="Выберите словарь" aria-haspopup="listbox" aria-expanded="false" aria-controls="dictionary-menu"><svg aria-hidden="true"><use href="#i-book"/></svg><span id="collection-select-name">Общий словарь</span><span id="collection-select-count" class="dictionary-count"></span><svg class="dictionary-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button></div>
+  <button type="button" class="secondary-action" id="new-collection"><svg aria-hidden="true"><use href="#i-plus"/></svg>Новый словарь</button>
+</div>
+<form id="collection-editor" class="collection-editor" hidden>
+  <label for="collection-name" id="collection-name-label">Название словаря</label>
+  <input id="collection-name" maxlength="50" required autocomplete="off">
+  <div class="collection-buttons"><button type="submit" class="primary-action" id="save-collection">Создать</button><button type="button" class="secondary-action" id="cancel-collection">Отмена</button></div>
+</form>
+<div class="collection-summary">
+  <div><h2 id="collection-title">Общий словарь</h2><p id="collection-info"></p></div>
+  <button type="button" class="primary-action" id="study-collection"><svg aria-hidden="true"><use href="#i-cards"/></svg>Учить словарь</button>
+</div>
+<div class="collection-buttons collection-tools">
+  <button type="button" class="secondary-action" id="open-word-picker" hidden><svg aria-hidden="true"><use href="#i-plus"/></svg>Из общего словаря</button>
+  <button type="button" class="text-action" id="rename-collection" hidden>Переименовать</button>
+</div>
+<section id="word-picker" class="word-picker" hidden aria-labelledby="picker-title">
+  <div class="picker-heading"><h3 id="picker-title">Выберите слова</h3><button type="button" id="close-word-picker" class="icon-button" aria-label="Закрыть выбор слов"><svg aria-hidden="true"><use href="#i-x"/></svg></button></div>
+  <label class="search"><span class="sr-only">Поиск в общем словаре</span><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="picker-search" placeholder="Слово или перевод" autocomplete="off"></label>
+  <ul id="picker-list" class="picker-list"></ul>
+  <p id="picker-empty" class="picker-empty" hidden></p>
+  <button type="button" class="primary-action" id="add-picked" disabled>Добавить выбранные</button>
+</section>
