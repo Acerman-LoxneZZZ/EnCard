@@ -8,16 +8,20 @@ const pickerSelection = new Set();
 const BUILTIN_COUNT = WORDS.length;
 try {
   const custom = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
+  let repairedTranscriptions = false;
   if (Array.isArray(custom)) custom.slice(0, 500).forEach(item => {
     if (item && typeof item.en === 'string' && typeof item.ru === 'string' &&
         item.en.length <= 80 && item.ru.length <= 120 && item.en.trim() && item.ru.trim()) {
-      WORDS.push({ id: WORDS.length, en: item.en.trim(), ru: item.ru.trim(),
-        ipa: typeof item.ipa === 'string' ? item.ipa : '',
+      const savedIpa = typeof item.ipa === 'string' ? item.ipa.trim() : '';
+      const ipa = savedIpa || transcriptionFor(item.en);
+      if (ipa && !savedIpa) repairedTranscriptions = true;
+      WORDS.push({ id: WORDS.length, en: item.en.trim(), ru: item.ru.trim(), ipa,
         audioUrl: typeof item.audioUrl === 'string' ? item.audioUrl : '',
         audioCredit: typeof item.audioCredit === 'string' ? item.audioCredit : '',
         audioSource: typeof item.audioSource === 'string' ? item.audioSource : '' });
     }
   });
+  if (repairedTranscriptions) saveCustomWords();
 } catch { /* Встроенная колода работает и без локального хранилища. */ }
 const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 const precisePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
@@ -429,9 +433,9 @@ function addWord(event) {
     return;
   }
   if (WORDS.length - BUILTIN_COUNT >= 500) { toast('Можно сохранить до 500 собственных слов.'); return; }
-  const word = {id: WORDS.length, en, ru, ipa: '', audioUrl: '', audioCredit: '', audioSource: ''};
+  const word = {id: WORDS.length, en, ru, ipa: transcriptionFor(en), audioUrl: '', audioCredit: '', audioSource: ''};
   try {
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify([...WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) => ({en,ru,ipa,audioUrl,audioCredit,audioSource})), {en,ru}]));
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify([...WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) => ({en,ru,ipa,audioUrl,audioCredit,audioSource})), {en,ru,ipa:word.ipa}]));
   } catch {
     toast('Не удалось сохранить слово. Проверьте доступ к хранилищу браузера.'); return;
   }

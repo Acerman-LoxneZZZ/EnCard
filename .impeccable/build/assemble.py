@@ -1,9 +1,11 @@
 from pathlib import Path
-import base64, re, urllib.request
+import base64, json, urllib.request
 
 root = Path.cwd()
 build = root / '.impeccable' / 'build'
 words = (build / 'words.js').read_text(encoding='utf-8')
+ipa_data = '\n' + (build / 'ipa-en-uk.txt').read_text(encoding='utf-8').strip() + '\n'
+ipa_script = 'const IPA_WORDLIST = ' + json.dumps(ipa_data, ensure_ascii=False).replace('<', '\\u003c') + ';\n'
 fonts = [
     ('Manrope', '400 700', 'https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf', 'manrope'),
     ('DM Serif Display', '400', 'https://fonts.gstatic.com/s/dmserifdisplay/v17/-nFnOHM81r4j6k0gjAW3mujVU2B2K_c.ttf', 'dmserifdisplay'),
@@ -23,9 +25,10 @@ for name, weight, url, slug in fonts:
 html = '''<!doctype html>
 <html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#0d1018"><meta name="description" content="Wordflow — английские слова по карточкам. Учитесь в своём ритме, повторяйте сложное и сохраняйте прогресс."><title>Wordflow — английский по карточкам</title>
 '''
-html += '<!-- Embedded font licenses.\n' + '\n\n'.join(licenses).replace('--', '—') + '\n-->\n'
+licenses.append('IPA data: https://github.com/open-dict-data/ipa-dict (data/en_UK.txt)\n' + (build/'ipa-LICENSE.txt').read_text(encoding='utf-8'))
+html += '<!-- Embedded asset licenses.\n' + '\n\n'.join(licenses).replace('--', '—') + '\n-->\n'
 html += '<style>\n' + '\n'.join(font_css) + '\n' + (build/'style.css').read_text(encoding='utf-8') + '\n</style></head><body>\n'
 html += (build/'body.html').read_text(encoding='utf-8').replace('<!-- collection-controls -->', (build/'collection-controls.html').read_text(encoding='utf-8'))
-html += '\n<script>\n"use strict";\n' + words + (build/'collections.js').read_text(encoding='utf-8') + '\n' + (build/'navigation.js').read_text(encoding='utf-8') + '\n' + (build/'app.js').read_text(encoding='utf-8') + '\n</script></body></html>\n'
+html += '\n<script>\n"use strict";\n' + words + ipa_script + (build/'transcriptions.js').read_text(encoding='utf-8') + '\n' + (build/'collections.js').read_text(encoding='utf-8') + '\n' + (build/'navigation.js').read_text(encoding='utf-8') + '\n' + (build/'app.js').read_text(encoding='utf-8') + '\n</script></body></html>\n'
 (root/'index.html').write_text(html,encoding='utf-8')
 print(f'Assembled index.html: {len(html.encode("utf-8")):,} bytes, all fonts embedded.')
