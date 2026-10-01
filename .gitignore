@@ -1,5 +1,10 @@
-# Local Impeccable preferences and generated verification dependencies.
+# Installed dependencies at any depth.
+node_modules/
+
+# Local Impeccable preferences and generated verification artifacts.
 .impeccable/config.local.json
-.impeccable/review/runtime/node_modules/
 .impeccable/review/before-enhancement.html
+.impeccable/review/github-reference.html
+.impeccable/review/*-detector.json
+.impeccable/build/*.png
 .impeccable/build/*.ttf

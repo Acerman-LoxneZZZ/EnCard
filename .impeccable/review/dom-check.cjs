@@ -15,7 +15,7 @@ function setup({saved=null,custom=null,dictionaries=null,storageFails=false,redu
     w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
     w.HTMLElement.prototype.setPointerCapture=function(id){this.capture=id;};w.HTMLElement.prototype.hasPointerCapture=function(id){return this.capture===id;};w.HTMLElement.prototype.releasePointerCapture=function(){this.capture=null;};
     Object.defineProperty(w.HTMLElement.prototype,'offsetWidth',{get:()=>480});
-    w.HTMLElement.prototype.getBoundingClientRect=()=>({left:0,top:0,width:480,height:330});
+    w.HTMLElement.prototype.getBoundingClientRect=function(){return this.id==='word-sound'?{left:420,top:260,right:476,bottom:316,width:56,height:56}:{left:0,top:0,right:480,bottom:330,width:480,height:330};};
     w.requestAnimationFrame=fn=>{const id=++serial;timers.set(id,{fn,delay:16});return id;};w.cancelAnimationFrame=id=>timers.delete(id);
     w.setTimeout=(fn,delay)=>{const id=++serial;timers.set(id,{fn,delay});return id;};w.clearTimeout=id=>timers.delete(id);
     w.speechSynthesis={getVoices:()=>[{lang:'en-GB'}],cancel:()=>{},speak:u=>utterances.push(u)};
@@ -44,6 +44,20 @@ function submit(t,id){t.el(id).dispatchEvent(new t.w.Event('submit',{bubbles:tru
 function createDictionary(t,name){t.click('new-collection');t.el('collection-name').value=name;submit(t,'collection-editor');return t.el('collection-select').value;}
 function chooseDictionary(t,id){t.click('collection-select');const option=t.el('dictionary-menu').querySelector(`[data-collection-id="${id}"]`);assert.ok(option);option.click();}
 function pickWord(t,id){const input=t.el('picker-list').querySelector(`input[value="${id}"]`);assert.ok(input,'word available in picker');input.checked=true;input.dispatchEvent(new t.w.Event('change',{bubbles:true}));}
+
+test('offline IPA repairs old words, persists new ones and preserves existing transcriptions',()=>{
+ const t=setup({custom:[{en:'eat',ru:'есть'},{en:'it',ru:'это'},{en:'now',ru:'сейчас'},{en:'hello',ru:'привет',ipa:'/həˈləʊ/'}]});
+ const stored=JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1'));
+ assert.equal(stored[0].ipa,'/ˈiːt/');assert.equal(stored[1].ipa,'/ˈɪt/');assert.equal(stored[2].ipa,'/nˈaʊ/');assert.equal(stored[3].ipa,'/həˈləʊ/');
+ t.click('open-library');assert.equal(t.el('library-title').parentElement.querySelector('p'),null);
+ const eat=[...t.d.querySelectorAll('.word-row')].find(row=>row.querySelector('strong').textContent==='eat');assert.equal(eat.querySelector('small').textContent,'/ˈiːt/');
+ t.el('custom-en').value='Drink';t.el('custom-ru').value='пить';submit(t,'add-word-form');
+ assert.ok(JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1')).at(-1).ipa);
+ assert.equal(t.run('transcriptionFor("zzqxxxword")'),'');assert.equal(t.run('transcriptionFor("  EAT  ")'),'/ˈiːt/');
+ t.click('close-library');for(let i=0;i<20;i++)t.rate('yes');t.click('front-flip');
+ assert.equal(t.el('transcription').textContent,'/ˈiːt/');assert.equal(t.el('transcription').hidden,false);assert.equal(t.el('back-flip').getAttribute('aria-labelledby'),'word transcription');
+ assert.equal(t.requests.length,0);assert.equal(t.state().learned.length,20);t.close();
+});
 
 test('dictionary menu stays selectable through browser scroll and viewport resize',()=>{
  const t=setup();t.click('open-library');createDictionary(t,'Мой словарь');t.click('open-word-picker');pickWord(t,0);t.click('add-picked');t.click('study-collection');
@@ -255,7 +269,8 @@ test('hints belong only to hard reviews, survive reload, undo and completion',()
  const t=setup();
  assert.equal(t.el('letter-hint').hidden,true);assert.equal(t.el('queued-hint').hidden,true);
  assert.ok(!t.el('announcement').textContent.includes('Первая буква'));
- assert.equal(t.w.getComputedStyle(t.d.querySelector('.app')).overflow,'clip');
+ assert.equal(t.w.getComputedStyle(t.d.querySelector('.app')).overflow,'visible');
+ assert.equal(t.w.getComputedStyle(t.d.querySelector('.deck-viewport')).overflow,'hidden');
  t.rate('no');assert.deepEqual(t.state().hinted,[]);t.click('undo');
  t.rate('hard');assert.deepEqual(t.state().hinted,[0]);assert.equal(t.el('letter-hint').hidden,true);
  t.rate('yes');t.rate('yes');
@@ -283,7 +298,7 @@ test('reduced motion, English speech text and fallback',()=>{
 test('custom word is saved, studied and spoken in English',()=>{
  const t=setup();t.click('open-library');t.el('custom-en').value='thrive';t.el('custom-ru').value='процветать';
  t.el('add-word-form').dispatchEvent(new t.w.Event('submit',{bubbles:true,cancelable:true}));
- assert.equal(t.state().queue.length,21);assert.deepEqual(JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1')),[{en:'thrive',ru:'процветать'}]);
+ assert.equal(t.state().queue.length,21);assert.deepEqual(JSON.parse(t.w.localStorage.getItem('wordflow.custom-words.v1')),[{en:'thrive',ru:'процветать',ipa:'/θɹˈaɪv/'}]);
  t.click('close-library');for(let i=0;i<20;i++)t.rate('yes');assert.equal(t.el('word').textContent,'thrive');
  t.click('front-flip');t.flush();t.click('word-sound');assert.equal(t.utterances.at(-1).text,'thrive');
  const saved=t.state();t.close();const restored=setup({saved,custom:[{en:'thrive',ru:'процветать'}]});assert.equal(restored.el('word').textContent,'thrive');restored.close();
@@ -305,6 +320,42 @@ test('one pointer tap flips once, subsequent click does not flip again',()=>{
  assert.equal(t.el('front').getAttribute('aria-hidden'),'false');
  t.pointer('pointerdown',100);t.pointer('pointercancel',100);
  assert.equal(t.el('front').getAttribute('aria-hidden'),'false');t.close();
+});
+test('sound area routes mis-targeted touches, suppresses duplicate click and never flips',()=>{
+ const t=setup();t.click('front-flip');t.flush();
+ t.pointer('pointerdown',448,288);t.pointer('pointerup',448,288);
+ assert.equal(t.el('back').getAttribute('aria-hidden'),'false');
+ assert.equal(t.utterances.length,1);assert.equal(t.run('drag'),null);
+ t.el('word-sound').dispatchEvent(new t.w.MouseEvent('click',{bubbles:true,detail:1}));
+ assert.equal(t.utterances.length,1,'synthetic click does not speak twice');
+ t.pointer('pointerdown',415,288);t.pointer('pointerup',415,288);
+ assert.equal(t.utterances.length,2,'edge touch uses the sound gesture');
+ t.pointer('pointerdown',448,288);t.pointer('pointercancel',448,288);
+ assert.equal(t.utterances.length,2);assert.equal(t.run('flipped'),true);
+ t.pointer('pointerdown',448,288);t.pointer('pointerup',100,100);
+ assert.equal(t.utterances.length,2,'release outside cancels audio without flipping');assert.equal(t.run('flipped'),true);t.close();
+});
+test('speech starts synchronously while recording lookup is pending',()=>{
+ const t=setup({remote:true});
+ t.click('front-flip');t.flush();t.click('word-sound');
+ assert.equal(t.utterances.length,1,'tap must speak before any network promise settles');
+ assert.equal(t.utterances[0].text,'discover');
+ assert.equal(t.run('activeUtterance === null'),false,'retain the utterance during playback');
+ t.rate('yes');assert.equal(t.run('activeUtterance'),null);t.close();
+});
+test('unsupported Ogg recording uses the English voice immediately',()=>{
+ const t=setup();let played=false;
+ t.w.Audio=class{canPlayType(){return '';}play(){played=true;return Promise.resolve();}};
+ t.run('WORDS[0].audioUrl="https://upload.wikimedia.org/test.ogg"');
+ t.click('front-flip');t.flush();t.click('word-sound');
+ assert.equal(played,false);assert.equal(t.utterances[0].text,'discover');t.close();
+});
+test('obsolete speech completion cannot clear a newer playback',()=>{
+ const t=setup();t.click('front-flip');t.flush();t.click('word-sound');
+ const old=t.utterances[0];t.click('word-sound');old.onend();
+ assert.equal(t.el('word-sound').getAttribute('aria-busy'),'true');
+ assert.equal(t.run('activeUtterance === null'),false);
+ t.utterances[1].onend();assert.equal(t.el('word-sound').hasAttribute('aria-busy'),false);t.close();
 });
 async function remoteIntegration() {
  const t=setup({remote:true});t.click('open-library');t.el('custom-en').value='thrive';t.el('custom-ru').value='процветать';

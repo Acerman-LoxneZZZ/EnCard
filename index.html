@@ -255,7 +255,7 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 @keyframes drift-left { to { transform: translate(20%, 12%) scale(1.2); opacity: .75; } }
 @keyframes drift-right { to { transform: translate(-20%, 20%); opacity: .8; } }
 /* Уходящие карточки не расширяют документ. Обычная прокрутка словаря сохраняется. */
-.app { position: relative; max-width: 1100px; padding: 28px 44px 24px; margin: auto; overflow: clip; }
+.app { position: relative; max-width: 1100px; padding: 28px 44px 24px; margin: auto; overflow: visible; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; letter-spacing: -.04em; }
 .brand-mark { width: 35px; height: 38px; color: var(--accent); display: grid; place-items: center; transform: rotate(-8deg); }
@@ -277,8 +277,8 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 
 #session { padding-top: 28px; }
 .study { max-width: 528px; margin: auto; overflow-anchor: none; }
-/* Bound transformed cards locally, without changing the page scroll extent. */
-.deck-viewport { position: relative; overflow: hidden; contain: paint; padding: 55px 70px 65px; margin: -55px -70px -65px; pointer-events: none; }
+/* Clip exiting cards at the screen edges without extending page scroll bounds. */
+.deck-viewport { position: relative; overflow: hidden; contain: paint; width: var(--viewport-width, 100vw); padding: 120px calc((var(--viewport-width, 100vw) - 100%) / 2); margin: -120px calc((100% - var(--viewport-width, 100vw)) / 2); pointer-events: none; }
 .deck { pointer-events: auto; }
 
 
@@ -325,6 +325,7 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .sound:hover { color: var(--text); background: #ffffff0c; }
 .sound.speaking { color: var(--green); border-color: #91d9ba50; background: #91d9ba12; }
 .back-sound { position: relative; z-index: 2; margin-left: auto; flex: 0 0 43px; cursor: pointer; pointer-events: auto; }
+.back-sound { min-width: 56px; min-height: 56px; touch-action: manipulation; }
 .back-sound[hidden] { display: none; }
 .back-sound svg { pointer-events: none; }
 .face[aria-hidden="true"] { display: none; visibility: hidden; pointer-events: none; }
@@ -584,8 +585,38 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
   .sound:active { background: #c4b6f51a; }
 }
 
+/* White shimmer follows the edges without covering the word. */
+@property --edge-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@keyframes edge-shimmer { to { --edge-angle: 360deg; } }
+.face::before,
+:is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter)::after {
+ content: ''; position: absolute; inset: 0; z-index: 3; padding: 1px; border-radius: inherit; pointer-events: none;
+ background: conic-gradient(from var(--edge-angle), #ffffff18 0deg, #ffffff30 55deg, #ffffffa6 85deg, #fff 100deg, #ffffff30 125deg, #ffffff18 180deg, #ffffff70 265deg, #ffffff18 310deg);
+ -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+ opacity: .65; animation: edge-shimmer 9s linear infinite; transition: opacity .2s;
+}
+.face::before { padding: 1.5px; opacity: .9; }
+:is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter) { position: relative; }
+.answer { box-shadow: inset 0 0 12px #ffffff07, 0 0 12px #ffffff08; }
+.answer:hover:not(:disabled) { box-shadow: inset 0 0 16px #ffffff0c, 0 0 18px #ffffff15; }
+.answer-hard::after { animation-delay: -3s; }
+.answer-yes::after { animation-delay: -6s; }
+:is(.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter)::after { opacity: .4; animation-duration: 12s; }
+:is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter):hover:not(:disabled)::after { opacity: .95; }
+button:disabled::after { opacity: .15; animation-play-state: paused; }
+.effects-off .face::before,.effects-off button::after { animation: none; }
+.page-hidden .face::before,.page-hidden button::after { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .face::before,button::after { animation: none !important; } }
+
+/* A full-screen luminous grid with a quiet reading zone. */
+#light-grid { display: block; width: 100%; height: 100%; opacity: .85;
+  mask-image: radial-gradient(ellipse 30% 36% at 50% 44%, #0003, #000 100%);
+  -webkit-mask-image: radial-gradient(ellipse 30% 36% at 50% 44%, #0003, #000 100%); }
+.effects-off #light-grid { opacity: .35; }
+@media (max-width: 600px) { #light-grid { opacity: .8; } }
+
 </style></head><body>
-<div class="ambient" aria-hidden="true"></div>
+<div class="ambient" aria-hidden="true"><canvas id="light-grid"></canvas></div>
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
 <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -1116,10 +1147,17 @@ const precisePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
 const fresh = (ids = collectionWordIds()) => ({ queue: [...ids], learned: [], difficult: [], hinted: [], attempts: 0, streak: 0, bestStreak: 0 });
 let state = fresh(), previous = null, busy = false, flipped = false, drag = null;
 let flipping = false, flipAnimation = null;
-let suppressClickUntil = 0, toastTimer = 0, transitionTimer = 0, tiltFrame = 0, speechToken = 0, speechWatchdog = 0, activeAudio = null;
+let suppressClickUntil = 0, toastTimer = 0, transitionTimer = 0, tiltFrame = 0, speechToken = 0, speechWatchdog = 0, activeAudio = null, activeUtterance = null;
 let storageAvailable = true, effectsEnabled = true, shortcutsEnabled = true, libraryOpen = false, filter = 'all';
 const card = $('card'), tilt = $('card-tilt'), inner = $('card-inner');
 const answers = [...document.querySelectorAll('[data-answer]')];
+
+// Use the available screen width, excluding the desktop scrollbar gutter.
+function updateViewportWidth() {
+  document.documentElement.style.setProperty('--viewport-width', `${document.documentElement.getBoundingClientRect().width || document.documentElement.clientWidth || window.innerWidth}px`);
+}
+updateViewportWidth();
+window.addEventListener('resize', updateViewportWidth, {passive:true});
 
 // Совместимо с сохранениями первой версии. Повреждённые данные не ломают очередь.
 function validState(s) {
@@ -1360,6 +1398,7 @@ async function lookupRecording(word) {
 function stopSpeech() {
   speechToken++; clearTimeout(speechWatchdog);
   if (activeAudio) { activeAudio.pause(); activeAudio.removeAttribute('src'); activeAudio.load(); activeAudio = null; }
+  activeUtterance = null;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   document.querySelectorAll('.sound').forEach(b => {b.classList.remove('speaking');b.removeAttribute('aria-busy');});
 }
@@ -1369,11 +1408,12 @@ function speakWithBrowser(word, button, token) {
     toast('Запись недоступна, а браузер не поддерживает озвучку. Откройте приложение в Chrome или Edge.'); return;
   }
   const utterance = new SpeechSynthesisUtterance(word.en);
+  activeUtterance = utterance;
   const voices = speechSynthesis.getVoices();
   const voice = voices.find(v => /^en[-_]GB$/i.test(v.lang)) || voices.find(v => /^en[-_]/i.test(v.lang));
   if (voice) utterance.voice = voice;
   utterance.lang = voice ? voice.lang : 'en-US'; utterance.rate = .88;
-  const clean = () => { if (token !== speechToken) return; clearTimeout(speechWatchdog); button.classList.remove('speaking'); button.removeAttribute('aria-busy'); };
+  const clean = () => { if (token !== speechToken) return; activeUtterance = null; clearTimeout(speechWatchdog); button.classList.remove('speaking'); button.removeAttribute('aria-busy'); };
   utterance.onend = clean;
   utterance.onerror = event => { clean(); if (token === speechToken && !['interrupted','canceled'].includes(event.error)) toast('Нет записи и системный голос не ответил. Проверьте звук браузера.'); };
   speechWatchdog = setTimeout(() => { if (token === speechToken) { clean(); toast('Системный голос не ответил. Проверьте звук браузера или попробуйте другое слово.'); } }, 12000);
@@ -1387,22 +1427,44 @@ function speak(button) {
   stopSpeech();
   const word = WORDS[state.queue[0]], token = speechToken;
   button.classList.add('speaking'); button.setAttribute('aria-busy','true');
-  if (!word.audioUrl && !('fetch' in window)) { speakWithBrowser(word,button,token); return; }
-  const play = async () => {
-    const url = word.audioUrl || await lookupRecording(word);
-    if (token !== speechToken) return;
-    if (url && 'Audio' in window) {
-      const player = new Audio(url);
-      activeAudio = player;
-      player.onended = () => { if (token === speechToken) { button.classList.remove('speaking'); button.removeAttribute('aria-busy'); activeAudio = null; } };
-      player.onerror = () => { if (token === speechToken) { activeAudio = null; speakWithBrowser(word,button,token); } };
-      speechWatchdog = setTimeout(() => { if (token === speechToken && activeAudio === player) { player.pause(); activeAudio = null; speakWithBrowser(word,button,token); } }, 8000);
-      try { await player.play(); clearTimeout(speechWatchdog); return; }
-      catch { activeAudio = null; }
-    }
-    if (token === speechToken) speakWithBrowser(word,button,token);
+  // Start within the tap event: never wait for a network lookup to unlock sound.
+  if (!word.audioUrl || !('Audio' in window)) {
+    speakWithBrowser(word,button,token); return;
+  }
+  let player;
+  try { player = new Audio(word.audioUrl); }
+  catch { speakWithBrowser(word,button,token); return; }
+  // Older iOS browsers cannot decode Commons Ogg recordings.
+  const ogg = /\.ogg(?:[?#]|$)/i.test(word.audioUrl);
+  if (ogg && player.canPlayType && !player.canPlayType('audio/ogg; codecs="vorbis"')) {
+    speakWithBrowser(word,button,token); return;
+  }
+  activeAudio = player;
+  const clean = () => {
+    if (token !== speechToken || activeAudio !== player) return;
+    clearTimeout(speechWatchdog); activeAudio = null;
+    button.classList.remove('speaking'); button.removeAttribute('aria-busy');
   };
-  void play();
+  const fallback = () => {
+    if (token !== speechToken || activeAudio !== player) return;
+    clearTimeout(speechWatchdog); activeAudio = null;
+    player.onended = player.onerror = player.onplaying = null;
+    player.pause(); player.removeAttribute('src'); player.load();
+    speakWithBrowser(word,button,token);
+  };
+  player.onended = clean;
+  player.onerror = fallback;
+  player.onplaying = () => {
+    if (token === speechToken && activeAudio === player) clearTimeout(speechWatchdog);
+  };
+  speechWatchdog = setTimeout(fallback, 8000);
+  try {
+    const started = player.play();
+    started?.then(() => {
+      if (token === speechToken && activeAudio === player) clearTimeout(speechWatchdog);
+    }, fallback);
+  } catch { fallback(); }
+
 }
 function celebrate() {
   if (!moving()) return;
@@ -1454,7 +1516,13 @@ function rate(kind) {
   $('deck').classList.add('advancing');
   card.style.transition = delay ? `transform ${delay}ms cubic-bezier(.3,.15,.3,1)` : 'none';
   if (delay) {
-    const distance = Math.max(card.offsetWidth + 140, 450);
+    const bounds = $('deck').getBoundingClientRect();
+    const center = bounds.left + bounds.width / 2;
+    const angle = 16 * Math.PI / 180;
+    const extent = (card.offsetWidth * Math.cos(angle) + card.offsetHeight * Math.sin(angle)) / 2 + 100;
+    const distance = kind === 'yes'
+      ? document.documentElement.clientWidth - center + extent
+      : center + extent;
     const downDistance = Math.max(card.offsetHeight + 140, 450);
     card.style.transform = kind === 'hard' ? `translate3d(0,${downDistance}px,0) rotate(5deg)` : `translate3d(${kind==='yes'?distance:-distance}px,-24px,0) rotate(${kind==='yes'?16:-16}deg)`;
   }
@@ -1566,10 +1634,43 @@ document.querySelectorAll('.flip-target').forEach(button => button.addEventListe
   // Pointer taps are handled once in endDrag; click handles keyboard/AT activation.
   if (event.detail === 0 && !busy && performance.now() >= suppressClickUntil) setFlipped(!flipped,true);
 }));
-$('word-sound').addEventListener('pointerdown', event => event.stopPropagation());
-$('word-sound').addEventListener('pointerup', event => event.stopPropagation());
-$('word-sound').addEventListener('pointermove', event => event.stopPropagation());
-$('word-sound').addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); speak(event.currentTarget); });
+// Route the complete sound gesture before the card's flip/swipe handlers.
+let soundPointer = null, suppressSoundClickUntil = 0;
+function overSound(event, useTarget = true) {
+  const button = $('word-sound');
+  if (button.hidden || button.disabled || !flipped || flipping || libraryOpen) return false;
+  if (useTarget && event.target?.closest?.('#word-sound')) return true;
+  const r = button.getBoundingClientRect(), slop = 8;
+  return r.width > 0 && r.height > 0 && event.clientX >= r.left-slop && event.clientX <= r.right+slop
+    && event.clientY >= r.top-slop && event.clientY <= r.bottom+slop;
+}
+card.addEventListener('pointerdown', event => {
+  if (!event.isPrimary || event.button !== 0 || busy || !overSound(event)) return;
+  event.preventDefault(); event.stopPropagation();
+  drag = null; resetTilt(); soundPointer = event.pointerId;
+  $('word-sound').focus({preventScroll:true});
+  $('word-sound').setPointerCapture?.(event.pointerId);
+}, true);
+card.addEventListener('pointermove', event => {
+  if (event.pointerId === soundPointer) { event.preventDefault(); event.stopPropagation(); }
+}, true);
+function endSound(event, cancelled = false) {
+  if (event.pointerId !== soundPointer) return;
+  event.preventDefault(); event.stopPropagation();
+  soundPointer = null; suppressSoundClickUntil = performance.now() + 600;
+  const button = $('word-sound');
+  if (button.hasPointerCapture?.(event.pointerId)) button.releasePointerCapture(event.pointerId);
+  if (!cancelled && overSound(event, false)) speak(button);
+}
+card.addEventListener('pointerup', event => endSound(event), true);
+card.addEventListener('pointercancel', event => endSound(event, true), true);
+$('word-sound').addEventListener('lostpointercapture', event => {
+  if (soundPointer === event.pointerId) soundPointer = null;
+});
+$('word-sound').addEventListener('click', event => {
+  event.preventDefault(); event.stopPropagation();
+  if (event.detail === 0 || performance.now() >= suppressSoundClickUntil) speak(event.currentTarget);
+});
 $('open-library').addEventListener('click', () => toggleLibrary(!libraryOpen));
 $('close-library').addEventListener('click', () => toggleLibrary(false));
 $('word-search').addEventListener('input',renderLibrary);
@@ -1586,7 +1687,7 @@ motionReduced.addEventListener?.('change',applyEffects);
 
 // Один Pointer Events-поток обслуживает мышь, перо и сенсорный экран.
 card.addEventListener('pointerdown', event => {
-  if (busy || flipping || !event.isPrimary || event.button !== 0 || event.target.closest('.sound, a')) return;
+  if (busy || flipping || !event.isPrimary || event.button !== 0 || overSound(event) || event.target.closest('.sound, a')) return;
   card.getAnimations?.().forEach(animation => animation.cancel()); resetTilt();
   drag = {id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,lastT:performance.now(),vx:0,vy:0,dx:0,dy:0,axis:null,active:false};
 });
@@ -1630,7 +1731,7 @@ function endDrag(event,cancelled=false) {
   const last=drag; drag=null; card.classList.remove('dragging');
   if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
   if (!last.active) {
-    if (!cancelled) setFlipped(!flipped);
+    if (!cancelled && !overSound(event)) setFlipped(!flipped);
     return;
   }
   suppressClickUntil=performance.now()+400;
@@ -1666,4 +1767,83 @@ initCollections();
 document.body.classList.toggle('page-hidden',document.hidden);
 applyEffects(); save(); render(true);
 
-</script></body></html>
+</script>
+
+<script>
+/* Mobile-first light grid; no network assets or animation dependency. */
+(() => {
+  const canvas = document.getElementById('light-grid');
+  if (!canvas || typeof CanvasRenderingContext2D === 'undefined') return;
+  let ctx;
+  try { ctx = canvas.getContext('2d', { alpha: true }); } catch (_) { return; }
+  if (!ctx) return;
+  let width = 0, height = 0, frame = 0, last = 0, clock = 0;
+  let touchX = 0, touchY = 0, touchAt = -10000;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const active = () => !document.hidden && !reduced.matches && !document.body.classList.contains('effects-off');
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+    const spacing = Math.max(width < 650 ? 24 : 32, Math.sqrt(width * height / 2200));
+    const t = clock * .00018;
+    const offsetX = 12 + Math.sin(t * .36) * 3;
+    const offsetY = 12 + Math.cos(t * .28) * 3;
+    const glowX = width * (.5 + Math.sin(t * .6 + .8) * .42);
+    const glowY = height * (.5 + Math.cos(t * .43 + 1.5) * .42);
+    const reach = Math.max(100, Math.min(width, height) * .42);
+    const touchFade = Math.max(0, 1 - (clock - touchAt) / 1600);
+    // Continuous square lattice: geometry stays regular as illumination moves.
+    ctx.strokeStyle = 'rgba(190,185,224,.065)'; ctx.lineWidth = .6;
+    ctx.beginPath();
+    for (let x = offsetX; x <= width; x += spacing) { ctx.moveTo(x,0); ctx.lineTo(x,height); }
+    for (let y = offsetY; y <= height; y += spacing) { ctx.moveTo(0,y); ctx.lineTo(width,y); }
+    ctx.stroke();
+    for (let x = offsetX; x <= width; x += spacing) {
+      for (let y = offsetY; y <= height; y += spacing) {
+        const dx = (x - glowX) / reach, dy = (y - glowY) / reach;
+        const light = Math.exp(-(dx * dx + dy * dy) * 1.6);
+        const tx = (x - touchX) / 90, ty = (y - touchY) / 90;
+        const touch = Math.exp(-(tx * tx + ty * ty) * 1.5) * touchFade;
+        const energy = Math.min(1, light * .75 + touch * .65);
+        const alpha = .19 + energy * .5;
+        const radius = .8 + energy * .65;
+        ctx.fillStyle = `rgba(215,209,245,${alpha})`;
+        ctx.beginPath(); ctx.arc(x,y,radius,0,Math.PI * 2); ctx.fill();
+        if (energy > .25) {
+          ctx.fillStyle = `rgba(217,222,255,${energy * .065})`;
+          ctx.beginPath(); ctx.arc(x,y,4 + energy * 2,0,Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+  }
+  function tick(now) {
+    frame = 0;
+    if (!active()) { last = 0; return; }
+    if (!last || now - last >= 40) {
+      clock += last ? Math.min(now - last, 64) : 0; last = now; draw();
+    }
+    frame = requestAnimationFrame(tick);
+  }
+  function sync() {
+    cancelAnimationFrame(frame); frame = 0; last = 0;
+    if (active()) frame = requestAnimationFrame(tick); else draw();
+  }
+  function resize() {
+    width = innerWidth; height = innerHeight;
+    const ratio = Math.min(devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio,0,0,ratio,0,0); draw(); sync();
+  }
+  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('pointerdown', event => {
+    if (!active() || !event.isPrimary) return;
+    touchX = event.clientX; touchY = event.clientY; touchAt = clock;
+  }, { passive: true });
+  document.addEventListener('visibilitychange', sync);
+  window.addEventListener('pagehide', () => { cancelAnimationFrame(frame); frame = 0; });
+  window.addEventListener('pageshow', sync);
+  reduced.addEventListener('change', sync);
+  new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  resize();
+})();
+</script>
+</body></html>
