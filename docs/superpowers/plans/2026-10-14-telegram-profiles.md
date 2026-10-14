@@ -53,10 +53,10 @@ browser regression checks and product documentation.
 
 ### Task 3: Publish and preserve sources
 
-- [ ] Configure the provided numeric Telegram bot ID as a runtime variable.
+- [x] Configure the provided numeric Telegram bot ID as a runtime variable.
 - [x] Apply local migrations and validate the production artifact.
-- [ ] Push source to Sites, save and deploy the existing project.
-- [ ] Confirm D1 provisioning and API rejection of unauthenticated requests.
+- [x] Push source to Sites, save and deploy the existing project.
+- [x] Confirm D1 provisioning and API rejection of unauthenticated requests.
 - [x] Commit and push the checked implementation to EnCard.
 
 ## Verification and remaining configuration
@@ -67,7 +67,9 @@ import, account switching and refusal to open an unverified cache. A separate
 read-only review found two issues (offline identity and stale import state);
 both were fixed, reviewed and given regression coverage.
 
-The numeric TELEGRAM_BOT_ID was requested from the owner and is still pending.
-Do not replace the working published static version until that value is provided
-and runtime configuration is applied. Production D1 provisioning and real
-Telegram end-to-end verification remain part of publication.
+The owner supplied numeric TELEGRAM_BOT_ID 7095007468; it is configured in Sites
+runtime revision 1. Site version 5 deployed successfully. The live page returns
+HTTP 200 and the correct bot ID; D1 binding DB contains the profiles table.
+Anonymous and invalid-signature profile requests both return HTTP 401.
+The browser scenarios use Telegram/API fixtures; a real signed Telegram session
+is exercised when the user next opens the Mini App through @WordsENRUbot.
