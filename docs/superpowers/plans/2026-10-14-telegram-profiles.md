@@ -73,3 +73,13 @@ HTTP 200 and the correct bot ID; D1 binding DB contains the profiles table.
 Anonymous and invalid-signature profile requests both return HTTP 401.
 The browser scenarios use Telegram/API fixtures; a real signed Telegram session
 is exercised when the user next opens the Mini App through @WordsENRUbot.
+
+### Production bot ID correction
+
+The first real Telegram launch failed signature verification. The owner then
+confirmed bot ID 8693618810; the previous value 7095007468 was incorrect.
+Updated TELEGRAM_BOT_ID in Sites runtime revision 2 and redeployed saved version
+5 successfully. The production HTML, including the bot's existing ?v=3 URL,
+now contains botId 8693618810. A real signed login still needs confirmation
+from the user's Telegram client. No bot token was stored in project files
+or configured in Sites.
