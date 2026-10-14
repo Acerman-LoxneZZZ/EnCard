@@ -1899,6 +1899,11 @@ applyEffects(); save(); render(true);
     };
   }
 
+  // The hosted profile layer reuses the same portable data and validation.
+  window.WordflowData = {snapshot, validateBackup,
+    closeViews() { if (libraryOpen) toggleLibrary(false); if (!$('help').hidden) setHelp(false, false); stopSpeech(); },
+    notify: toast};
+
   $('export-backup').addEventListener('click', () => {
     try {
       const blob = new Blob([JSON.stringify(snapshot(), null, 2)], {type:'application/json'});

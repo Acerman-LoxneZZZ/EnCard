@@ -1,0 +1,40 @@
+.profile-loading .app { display:none; }
+.profile-open .progress-area,.profile-open #active-collection { display:none; }
+.telegram-gate { position:relative; z-index:2; max-width:440px; margin:0 auto; min-height:85svh; padding:40px 24px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:18px; }
+.telegram-gate .brand { margin-bottom:20px; }
+.telegram-gate h1 { font-size:clamp(28px,7vw,38px); line-height:1.15; letter-spacing:-.03em; margin:0; }
+.telegram-gate p { color:var(--muted); line-height:1.65; margin:0; }
+.profile-link,.profile-action { display:inline-flex; align-items:center; justify-content:center; min-height:48px; padding:12px 20px; border-radius:14px; border:1px solid #c4b6f54a; background:#c4b6f514; color:var(--text); font-weight:600; text-decoration:none; cursor:pointer; }
+.profile-link:hover,.profile-action:hover { background:#c4b6f524; }
+.profile-action:disabled { opacity:.5; cursor:default; }
+.profile-button { position:relative; display:grid; place-items:center; width:44px; height:44px; padding:0; border:1px solid #c4b6f52a; border-radius:50%; background:#c4b6f50c; color:var(--accent); flex-shrink:0; }
+.profile-button[data-state="pending"]::after,.profile-button[data-state="offline"]::after,.profile-button[data-state="conflict"]::after,.profile-button[data-state="error"]::after { content:''; position:absolute; right:0; bottom:0; width:9px; height:9px; border-radius:50%; background:var(--amber); border:2px solid var(--bg); }
+.profile-button[data-state="error"]::after { background:var(--red); }
+.profile-button svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.7; }
+.profile-button img { width:100%; height:100%; border-radius:50%; object-fit:cover; }
+.profile-panel { max-width:528px; margin:24px auto 50px; }
+.profile-panel[hidden],.telegram-gate[hidden],.profile-note[hidden] { display:none; }
+.profile-title { display:flex; align-items:center; gap:16px; margin-bottom:30px; }
+.profile-back { min-width:44px; min-height:44px; padding:8px; border:1px solid #ffffff16; border-radius:12px; background:#ffffff06; color:var(--text); }
+.profile-back svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; }
+.profile-title h1 { margin:0; font-size:26px; letter-spacing:-.025em; }
+.profile-title h1:focus { outline:none; }
+.profile-person { display:flex; align-items:center; gap:18px; margin-bottom:32px; }
+.profile-avatar { width:72px; height:72px; border-radius:50%; object-fit:cover; background:#c4b6f514; display:grid; place-items:center; flex-shrink:0; color:var(--accent); font-size:26px; }
+.profile-person h2 { margin:0 0 5px; font-size:22px; overflow-wrap:anywhere; }
+.profile-person p { margin:0; color:var(--muted); font-size:14px; }
+.profile-stats { display:flex; gap:32px; margin:0 0 34px; padding:22px 0; border-top:1px solid #ffffff14; border-bottom:1px solid #ffffff14; }
+.profile-stats div { flex:1; }
+.profile-stats dt { color:var(--muted); font-size:13px; margin-bottom:8px; }
+.profile-stats dd { font-size:28px; margin:0; font-variant-numeric:tabular-nums; }
+.profile-sync { display:flex; align-items:center; gap:9px; color:var(--green); font-size:14px; line-height:1.5; }
+.profile-sync::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+.profile-sync[data-state="pending"],.profile-sync[data-state="offline"],.profile-sync[data-state="conflict"] { color:var(--amber); }
+.profile-sync[data-state="error"] { color:var(--red); }
+.profile-note { margin-top:22px; padding:20px; border:1px solid #c4b6f525; border-radius:16px; background:#c4b6f508; }
+.profile-note h3 { margin:0 0 10px; font-size:17px; }
+.profile-note p { margin:0 0 16px; color:var(--muted); font-size:14px; line-height:1.6; }
+.profile-note .profile-action { margin:6px 6px 0 0; min-height:44px; font-size:13px; }
+.profile-status-line { margin:18px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
+@media(max-width:480px) { .header-actions { gap:8px; } .profile-panel { margin-top:20px; } .profile-stats { gap:20px; } }
+@media(prefers-reduced-motion:reduce) { .profile-action,.profile-button { transition:none; } }

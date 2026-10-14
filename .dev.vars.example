@@ -1,0 +1,3 @@
+# Numeric ID of @WordsENRUbot (digits before ':' in its BotFather token).
+# No Telegram bot token is needed or stored by this app.
+TELEGRAM_BOT_ID=
