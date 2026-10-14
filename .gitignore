@@ -1,10 +1,20 @@
 # Installed dependencies at any depth.
 node_modules/
 
+# Local hosting checkout and deployment archives.
+.openai/site-source/
+.openai/packaging/
+.openai/*.tar.gz
+dist/
+.env
+.env.*
+!.env.example
+
 # Local Impeccable preferences and generated verification artifacts.
 .impeccable/config.local.json
 .impeccable/review/before-enhancement.html
 .impeccable/review/github-reference.html
 .impeccable/review/*-detector.json
+.impeccable/review/telegram-*.jpg
 .impeccable/build/*.png
 .impeccable/build/*.ttf

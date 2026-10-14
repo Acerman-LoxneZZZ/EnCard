@@ -290,17 +290,15 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .deck::before, .deck::after { content: ''; position: absolute; inset: 10px 12px -11px; border-radius: 25px; background: #202331; box-shadow: inset 0 -1px 0 #c4b6f524; transform: rotate(-2deg); z-index: -2; transition: transform var(--exit-duration, .6s) cubic-bezier(.2,.7,.25,1); }
 .deck::before { inset: 20px 23px -20px; background: #191e2b; transform: rotate(2deg); box-shadow: inset 0 -1px 0 #b6c8f21a, 0 25px 40px #00000030; z-index: -3; }
 .deck.last-card::before, .deck.last-card::after { opacity: 0; }
-.card { position: relative; z-index: 1; perspective: 1500px; cursor: grab; user-select: none; touch-action: none; transform: translate3d(0,0,0); transform-style: preserve-3d; transition: transform .45s var(--ease), opacity .2s; }
+.card { position: relative; z-index: 1; perspective: 1500px; cursor: pointer; user-select: none; touch-action: pan-y pinch-zoom; -webkit-tap-highlight-color: transparent; transform: translate3d(0,0,0); transform-style: preserve-3d; transition: transform .45s var(--ease), opacity .2s; }
 .queued-card { position:absolute; inset:0; z-index:-1; border-radius:24px; padding:60px 22px 86px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:13px; text-align:center; background:radial-gradient(ellipse at 8% 0%,#71618425,transparent 65%),linear-gradient(130deg,#292c3b,#1c212d 72%,#242735); box-shadow:inset 0 1px 0 #efdbff2b,0 18px 36px #0003; transform:translateY(16px) scale(.94) rotate(-2deg); transition:transform var(--exit-duration, .6s) cubic-bezier(.2,.7,.25,1); pointer-events:none; }
 .queued-card > * { visibility: hidden; }
-.deck.pulling:not(.turning) .queued-card > *, .deck.advancing:not(.turning) .queued-card > * { visibility: visible; }
-.deck.pulling .queued-card { transition: none; }
+.deck.advancing:not(.turning) .queued-card > * { visibility: visible; }
 .queue-word,.front .prompt-word { font-size:clamp(29px,4.3vw,42px); font-weight:500; line-height:1.2; letter-spacing:-.035em; text-wrap:balance; }
 .letter-hint { color:var(--accent); font-size:20px; font-weight:500; letter-spacing:.08em; line-height:1.5; }
 .deck.advancing::before { transform:rotate(-2deg) translateY(-4px); }.deck.advancing::after { transform:rotate(1deg) translateY(-3px); }
 .back .word { font-size:clamp(37px,5vw,52px); }.back .transcription { font-size:14px; }.back .flip-target { gap:10px; }
 .effects-off .queued-card { transition:none!important; }
-.card.dragging { cursor: grabbing; transition: none; will-change: transform; }
 .card-tilt { position: relative; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); transition: transform .35s var(--ease); }
 .card-inner { position: relative; display: grid; height: 380px; inset: 0; transform-origin: center; }
 .deck.turning .card-inner { will-change: transform; }
@@ -312,7 +310,8 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 27px 0; position: relative; z-index: 1; }
 .language { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; color: #9c9db3; }
 .flip-target { position: relative; z-index: 1; border: 0; background: transparent; padding: 16px 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px; width: 100%; flex: 1; cursor: inherit; color: var(--text); }
-.flip-target { min-height: 0; overflow-y: auto; overscroll-behavior: contain; justify-content: safe center; scrollbar-width: thin; }
+.flip-target { min-height: 0; overflow-y: auto; overscroll-behavior: contain; justify-content: safe center; scrollbar-width: thin; touch-action: pan-y pinch-zoom; }
+.card .face { touch-action: pan-y pinch-zoom; }
 .flip-target > * { flex-shrink: 0; max-width: 100%; overflow-wrap: anywhere; }
 .card-top, .card-bottom { flex-shrink: 0; }
 .flip-target:focus-visible { outline: none; }
@@ -615,6 +614,19 @@ button:disabled::after { opacity: .15; animation-play-state: paused; }
 .effects-off #light-grid { opacity: .35; }
 @media (max-width: 600px) { #light-grid { opacity: .8; } }
 
+/* Leave room for Telegram's controls as well as the device safe area. */
+html.in-telegram .app {
+  padding-top: calc(20px + var(--telegram-safe-top, 0px));
+  padding-bottom: calc(24px + var(--telegram-safe-bottom, 0px));
+}
+html.in-telegram body { min-height: var(--tg-viewport-stable-height, 100svh); }
+.backup-tools { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.backup-tools summary { width: fit-content; min-height: 44px; padding: 12px 0; color: var(--muted); cursor: pointer; font-size: 14px; }
+.backup-tools summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.backup-tools p { max-width: 65ch; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.backup-tools .collection-buttons { flex-wrap: wrap; }
+.backup-preview { margin-top: 16px; }
+.backup-tools button { min-height: 44px; }
 </style></head><body>
 <div class="ambient" aria-hidden="true"><canvas id="light-grid"></canvas></div>
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
@@ -1145,7 +1157,7 @@ try {
 const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 const precisePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
 const fresh = (ids = collectionWordIds()) => ({ queue: [...ids], learned: [], difficult: [], hinted: [], attempts: 0, streak: 0, bestStreak: 0 });
-let state = fresh(), previous = null, busy = false, flipped = false, drag = null;
+let state = fresh(), previous = null, busy = false, flipped = false, cardTap = null;
 let flipping = false, flipAnimation = null;
 let suppressClickUntil = 0, toastTimer = 0, transitionTimer = 0, tiltFrame = 0, speechToken = 0, speechWatchdog = 0, activeAudio = null, activeUtterance = null;
 let storageAvailable = true, effectsEnabled = true, shortcutsEnabled = true, libraryOpen = false, filter = 'all';
@@ -1281,7 +1293,7 @@ function resetQueuePreview() {
   const next = $('queued-card');
   next.style.transition = 'none';
   next.style.transform = '';
-  $('deck').classList.remove('advancing', 'pulling');
+  $('deck').classList.remove('advancing');
   $('deck').style.removeProperty('--exit-duration');
   queuePreview(state.queue[1]);
   void next.offsetWidth;
@@ -1485,9 +1497,8 @@ function rate(kind) {
   if (busy || navigationPending || dictionaryTrigger || libraryOpen || !state.queue.length || !['yes','no','hard'].includes(kind)) return;
   const refocusCard = card.contains(document.activeElement);
   const refocusAnswer = answers.includes(document.activeElement) ? document.activeElement : null;
-  busy = true; drag = null;
+  busy = true; cardTap = null;
   setFlipped(flipped, false, false);
-  card.classList.remove('dragging');
   card.getAnimations?.().forEach(animation => animation.cancel());
   resetTilt(); stopSpeech();
   previous = JSON.parse(JSON.stringify(state));
@@ -1510,7 +1521,6 @@ function rate(kind) {
   queuePreview(state.queue[0]);
   const delay = moving() ? (kind === 'hard' ? 600 : 510) : 0;
   $('deck').style.setProperty('--exit-duration', `${delay}ms`);
-  $('deck').classList.remove('pulling');
   void $('queued-card').offsetWidth;
   $('queued-card').style.transform = 'translateY(0) scale(1) rotate(0deg)';
   $('deck').classList.add('advancing');
@@ -1631,10 +1641,10 @@ document.querySelectorAll('.undo').forEach(button => button.addEventListener('cl
 $('restart').addEventListener('click',restart);
 document.querySelectorAll('.flip-target').forEach(button => button.addEventListener('click',event => {
   event.stopPropagation();
-  // Pointer taps are handled once in endDrag; click handles keyboard/AT activation.
+  // Pointer taps are handled once in endCardTap; click handles keyboard/AT activation.
   if (event.detail === 0 && !busy && performance.now() >= suppressClickUntil) setFlipped(!flipped,true);
 }));
-// Route the complete sound gesture before the card's flip/swipe handlers.
+// Route the complete sound gesture before the card's tap handlers.
 let soundPointer = null, suppressSoundClickUntil = 0;
 function overSound(event, useTarget = true) {
   const button = $('word-sound');
@@ -1647,7 +1657,7 @@ function overSound(event, useTarget = true) {
 card.addEventListener('pointerdown', event => {
   if (!event.isPrimary || event.button !== 0 || busy || !overSound(event)) return;
   event.preventDefault(); event.stopPropagation();
-  drag = null; resetTilt(); soundPointer = event.pointerId;
+  cardTap = null; resetTilt(); soundPointer = event.pointerId;
   $('word-sound').focus({preventScroll:true});
   $('word-sound').setPointerCapture?.(event.pointerId);
 }, true);
@@ -1685,15 +1695,21 @@ $('shortcuts-toggle').checked = shortcutsEnabled;
 $('shortcuts-toggle').addEventListener('change',()=>{shortcutsEnabled=$('shortcuts-toggle').checked;savePreferences();});
 motionReduced.addEventListener?.('change',applyEffects);
 
-// Один Pointer Events-поток обслуживает мышь, перо и сенсорный экран.
+// Track taps only: moving a finger never moves or answers a card.
+function moveCardTap(event) {
+  if (!cardTap || event.pointerId !== cardTap.id) return;
+  if (Math.max(Math.abs(event.clientX-cardTap.x), Math.abs(event.clientY-cardTap.y)) >= 8) cardTap.moved = true;
+}
 card.addEventListener('pointerdown', event => {
-  if (busy || flipping || !event.isPrimary || event.button !== 0 || overSound(event) || event.target.closest('.sound, a')) return;
-  card.getAnimations?.().forEach(animation => animation.cancel()); resetTilt();
-  drag = {id:event.pointerId,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,lastT:performance.now(),vx:0,vy:0,dx:0,dy:0,axis:null,active:false};
+  if (busy || flipping || navigationPending || dictionaryTrigger || libraryOpen || !state.queue.length ||
+      cardTap || !event.isPrimary || event.button !== 0 || overSound(event) || event.target.closest('.sound, a')) return;
+  resetTilt();
+  cardTap = {id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};
+  try { card.setPointerCapture?.(event.pointerId); } catch { /* Window handlers finish the tap if capture is unavailable. */ }
 });
 card.addEventListener('pointermove',event => {
   if (busy || flipping) return;
-  if (!drag) {
+  if (!cardTap) {
     if (!moving() || !precisePointer.matches || event.pointerType === 'touch') return;
     cancelAnimationFrame(tiltFrame);
     tiltFrame = requestAnimationFrame(() => {
@@ -1704,50 +1720,32 @@ card.addEventListener('pointermove',event => {
       tilt.style.setProperty('--light-x',`${x*100}%`); tilt.style.setProperty('--light-y',`${y*100}%`);
     }); return;
   }
-  if (event.pointerId !== drag.id) return;
-  const now = performance.now(); drag.dx = event.clientX-drag.x; drag.dy = event.clientY-drag.y;
-  if (!drag.active) {
-    if (Math.max(Math.abs(drag.dx),Math.abs(drag.dy))<8) return;
-    if (Math.abs(drag.dy)>Math.abs(drag.dx)) {
-      if (drag.dy<0) {drag=null;suppressClickUntil=performance.now()+400;return;}
-      drag.axis='y';
-    } else drag.axis='x';
-    drag.active=true; card.setPointerCapture(event.pointerId); card.classList.add('dragging');
-    $('deck').classList.add('pulling');
-  }
-  const dt=Math.max(now-drag.lastT,1);
-  drag.vx=(event.clientX-drag.lastX)/dt; drag.vy=(event.clientY-drag.lastY)/dt;
-  drag.lastX=event.clientX; drag.lastY=event.clientY; drag.lastT=now;
-  const down=drag.axis==='y';
-  card.style.transform = down ? `translate3d(${drag.dx*.15}px,${Math.max(0,drag.dy)}px,0) rotate(${moving()?drag.dx/45:0}deg)` : `translate3d(${drag.dx}px,${drag.dy*.18}px,0) rotate(${moving()?drag.dx/24:0}deg)`;
-  tint(down?'hard':drag.dx>=0?'yes':'no',(down?Math.max(0,drag.dy):Math.abs(drag.dx))/125);
-  if (moving()) {
-    const pull=Math.min(1,(down?Math.max(0,drag.dy):Math.abs(drag.dx))/180);
-    $('queued-card').style.transform=`translateY(${16*(1-pull)}px) scale(${.94+.06*pull}) rotate(${-2*(1-pull)}deg)`;
-  }
+  moveCardTap(event);
 });
-function endDrag(event,cancelled=false) {
-  if (!drag || event.pointerId !== drag.id) return;
-  const last=drag; drag=null; card.classList.remove('dragging');
-  if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
-  if (!last.active) {
-    if (!cancelled && !overSound(event)) setFlipped(!flipped);
-    return;
-  }
-  suppressClickUntil=performance.now()+400;
-  const down=last.axis==='y', distance=down?Math.max(0,last.dy):Math.abs(last.dx);
-  const velocity=performance.now()-last.lastT<100?(down?last.vy:last.vx):0;
-  const threshold=down?100:Math.min(110,card.offsetWidth*.25);
-  const flick=down?velocity>.55:Math.abs(velocity)>.55&&Math.sign(velocity)===Math.sign(last.dx);
-  if (!cancelled && (distance>threshold || (flick&&distance>35))) rate(down?'hard':last.dx>0?'yes':'no');
-  else {card.style.transform='';$('queued-card').style.transform='';$('deck').classList.remove('pulling');resetTint();}
+function endCardTap(event,cancelled=false) {
+  if (!cardTap || event.pointerId !== cardTap.id) return;
+  if (!cancelled) moveCardTap(event);
+  const last=cardTap;
+  cardTap=null;
+  try { if (card.hasPointerCapture?.(event.pointerId)) card.releasePointerCapture(event.pointerId); } catch {}
+  const rect=card.getBoundingClientRect();
+  const inside=event.clientX>=rect.left && event.clientX<=rect.left+rect.width && event.clientY>=rect.top && event.clientY<=rect.top+rect.height;
+  if (!cancelled && !last.moved && inside && !overSound(event) && !busy && !flipping && !navigationPending && !dictionaryTrigger && !libraryOpen && state.queue.length) setFlipped(!flipped);
+  else suppressClickUntil=performance.now()+400;
 }
-card.addEventListener('pointerup',event=>endDrag(event));
-card.addEventListener('pointercancel',event=>endDrag(event,true));
-card.addEventListener('lostpointercapture',event=>endDrag(event,true));
-card.addEventListener('pointerleave',()=>{if(!drag)resetTilt();});
-window.addEventListener('pointerup',event=>endDrag(event));
-window.addEventListener('blur',()=>{if(drag)endDrag({pointerId:drag.id},true);resetTilt();});
+card.addEventListener('pointerup',event=>endCardTap(event));
+card.addEventListener('pointercancel',event=>endCardTap(event,true));
+card.addEventListener('lostpointercapture',event=>{
+  // Capture loss from the inner word or sound button bubbles to the card.
+  if (event.target === card) endCardTap(event,true);
+});
+card.addEventListener('pointerleave',()=>{if(!cardTap)resetTilt();});
+window.addEventListener('pointermove',event=>{
+  if (cardTap && !card.contains(event.target)) moveCardTap(event);
+});
+window.addEventListener('pointerup',event=>endCardTap(event));
+window.addEventListener('pointercancel',event=>endCardTap(event,true));
+window.addEventListener('blur',()=>{if(cardTap)endCardTap({pointerId:cardTap.id},true);resetTilt();});
 window.addEventListener('keydown',event=>{
   if (navigationPending || dictionaryTrigger) return;
   if (event.altKey || event.ctrlKey || event.metaKey || event.repeat || busy) return;
@@ -1767,6 +1765,189 @@ initCollections();
 document.body.classList.toggle('page-hidden',document.hidden);
 applyEffects(); save(); render(true);
 
+</script>
+
+<script>
+/* Telegram integration is optional: the standalone file still works offline. */
+(() => {
+  function connectTelegram() {
+    const app = window.Telegram?.WebApp;
+    if (!app?.initData) return;
+    document.documentElement.classList.add('in-telegram');
+    const safeAreas = () => {
+      const device = app.safeAreaInset || {}, content = app.contentSafeAreaInset || {};
+      document.documentElement.style.setProperty('--telegram-safe-top', `${Math.max(0, device.top || 0) + Math.max(0, content.top || 0)}px`);
+      document.documentElement.style.setProperty('--telegram-safe-bottom', `${Math.max(0, device.bottom || 0) + Math.max(0, content.bottom || 0)}px`);
+    };
+    const supported = version => typeof app.isVersionAtLeast === 'function' && app.isVersionAtLeast(version);
+    app.ready();
+    app.expand();
+    if (supported('6.1')) {
+      app.setHeaderColor('#0d1018');
+      app.setBackgroundColor('#0d1018');
+    }
+    if (supported('7.10')) app.setBottomBarColor('#0d1018');
+    // Keep Telegram expanded while scrolling long card text.
+    if (supported('7.7')) app.disableVerticalSwipes();
+    safeAreas();
+    if (supported('8.0')) {
+      app.onEvent('safeAreaChanged', safeAreas);
+      app.onEvent('contentSafeAreaChanged', safeAreas);
+    }
+    if (app.BackButton) {
+      const updateBack = () => libraryOpen || !$('help').hidden ? app.BackButton.show() : app.BackButton.hide();
+      app.BackButton.onClick(() => {
+        if (!$('help').hidden) setHelp(false);
+        else if (libraryOpen) toggleLibrary(false);
+      });
+      new MutationObserver(updateBack).observe($('library'), {attributes:true, attributeFilter:['hidden']});
+      new MutationObserver(updateBack).observe($('help'), {attributes:true, attributeFilter:['hidden']});
+      updateBack();
+    }
+  }
+  if (window.Telegram?.WebApp) connectTelegram();
+  else if (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    const sdk = document.createElement('script');
+    sdk.src = 'https://telegram.org/js/telegram-web-app.js';
+    sdk.onload = connectTelegram;
+    document.head.append(sdk);
+  }
+})();
+</script>
+
+<script>
+/* A portable backup moves browser-local words and progress into Telegram. */
+(() => {
+  const keys = [CUSTOM_KEY, STORAGE_KEY, COLLECTIONS_KEY, PREFS_KEY];
+  let pending = null;
+  $('library').insertAdjacentHTML('beforeend', `
+    <details class="backup-tools" id="word-transfer">
+      <summary>Перенести словари</summary>
+      <p>Сохраните копию здесь и загрузите её в Telegram или другом браузере. В неё входят ваши слова, словари и прогресс.</p>
+      <div class="collection-buttons">
+        <button type="button" class="secondary-action" id="export-backup">Сохранить копию</button>
+        <button type="button" class="secondary-action" id="choose-backup">Загрузить копию</button>
+        <input type="file" id="backup-file" accept=".json,application/json" aria-label="Файл копии Wordflow" hidden>
+      </div>
+      <p id="backup-note" role="status"></p>
+      <div class="backup-preview" id="backup-preview" hidden>
+        <p id="backup-description"></p>
+        <p>Загрузка заменит текущие слова и прогресс. Перед заменой сохраните их копию, если хотите оставить оба набора.</p>
+        <div class="collection-buttons">
+          <button type="button" class="primary-action" id="apply-backup">Заменить и загрузить</button>
+          <button type="button" class="secondary-action" id="cancel-backup">Отмена</button>
+        </div>
+      </div>
+    </details>`);
+
+  function snapshot() {
+    collectionSessions[activeCollectionId] = state;
+    return {
+      format:'wordflow-backup', version:1, exportedAt:new Date().toISOString(),
+      builtinWords:WORDS.slice(0, BUILTIN_COUNT).map(word => word.en),
+      customWords:WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa}) => ({en,ru,ipa})),
+      session:collectionSessions.all,
+      collections:{items:collections, activeId:activeCollectionId,
+        sessions:Object.fromEntries(collections.map(item => [item.id, collectionSessions[item.id]]))},
+      preferences:{effects:effectsEnabled, shortcuts:shortcutsEnabled}
+    };
+  }
+
+  function validateBackup(data) {
+    const fail = () => { throw new Error('Файл не подходит. Выберите копию, сохранённую в Wordflow.'); };
+    if (!data || data.format !== 'wordflow-backup' || data.version !== 1 ||
+        !Array.isArray(data.builtinWords) || data.builtinWords.length !== BUILTIN_COUNT ||
+        data.builtinWords.some((word, i) => word !== WORDS[i].en)) fail();
+    if (!Array.isArray(data.customWords) || data.customWords.length > 500) fail();
+    const words = data.customWords.map(word => {
+      if (!word || typeof word.en !== 'string' || typeof word.ru !== 'string' ||
+          !word.en.trim() || !word.ru.trim() || word.en.length > 80 || word.ru.length > 120 ||
+          (word.ipa !== undefined && (typeof word.ipa !== 'string' || word.ipa.length > 250))) fail();
+      return {en:word.en.trim(), ru:word.ru.trim(), ipa:word.ipa?.trim() || transcriptionFor(word.en)};
+    });
+    const allIds = Array.from({length:BUILTIN_COUNT + words.length}, (_, i) => i);
+    const names = [...data.builtinWords, ...words.map(word => word.en)].map(name => name.toLocaleLowerCase('en'));
+    if (new Set(names).size !== names.length) fail();
+    function session(value, ids) {
+      if (!value || !Array.isArray(value.queue) || !Array.isArray(value.learned) || !Array.isArray(value.difficult)) fail();
+      const validIds = list => Array.isArray(list) && new Set(list).size === list.length && list.every(id => Number.isInteger(id) && ids.includes(id));
+      const all = [...value.queue, ...value.learned];
+      if (!validIds(all) || all.length !== ids.length || !validIds(value.difficult) ||
+          (value.hinted !== undefined && (!validIds(value.hinted) || value.hinted.some(id => !value.queue.includes(id) || !value.difficult.includes(id)))) ||
+          !Number.isSafeInteger(value.attempts) || value.attempts < value.learned.length) fail();
+      return reconcileSession(value, ids);
+    }
+    const stored = data.collections;
+    if (!stored || !Array.isArray(stored.items) || stored.items.length > 1000 || !stored.sessions || typeof stored.sessions !== 'object') fail();
+    const seen = new Set();
+    const items = stored.items.map(item => {
+      if (!item || typeof item.id !== 'string' || !/^deck-[a-z0-9-]+$/.test(item.id) || seen.has(item.id) ||
+          typeof item.name !== 'string' || !item.name.trim() || item.name.length > 50 ||
+          !Array.isArray(item.wordIds) || new Set(item.wordIds).size !== item.wordIds.length ||
+          item.wordIds.some(id => !Number.isInteger(id) || !allIds.includes(id))) fail();
+      seen.add(item.id);
+      return {id:item.id, name:item.name.trim(), wordIds:item.wordIds};
+    });
+    if (stored.activeId !== 'all' && !seen.has(stored.activeId)) fail();
+    const sessions = Object.fromEntries(items.map(item => [item.id, session(stored.sessions[item.id], item.wordIds)]));
+    if (!data.preferences || typeof data.preferences.effects !== 'boolean' || typeof data.preferences.shortcuts !== 'boolean') fail();
+    return {
+      [CUSTOM_KEY]:JSON.stringify(words),
+      [STORAGE_KEY]:JSON.stringify(session(data.session, allIds)),
+      [COLLECTIONS_KEY]:JSON.stringify({items, activeId:stored.activeId, sessions}),
+      [PREFS_KEY]:JSON.stringify({effects:data.preferences.effects, shortcuts:data.preferences.shortcuts})
+    };
+  }
+
+  $('export-backup').addEventListener('click', () => {
+    try {
+      const blob = new Blob([JSON.stringify(snapshot(), null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = `wordflow-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      $('backup-note').textContent = 'Копия подготовлена. Загрузите этот файл в другом браузере или в Telegram.';
+    } catch { $('backup-note').textContent = 'Не удалось создать копию. Попробуйте ещё раз.'; }
+  });
+  $('choose-backup').addEventListener('click', () => $('backup-file').click());
+  $('cancel-backup').addEventListener('click', () => {
+    pending = null; $('backup-preview').hidden = true; $('backup-file').value = '';
+    $('choose-backup').focus();
+  });
+  $('backup-file').addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    pending = null; $('backup-preview').hidden = true;
+    if (!file) return;
+    $('backup-note').textContent = 'Проверяем копию…';
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('Копия слишком большая. Выберите файл размером до 5 МБ.');
+      const data = JSON.parse(await file.text());
+      pending = validateBackup(data);
+      $('backup-description').textContent = `В копии: ${data.customWords.length} собственных слов, ${data.collections.items.length} личных словарей. Прогресс также будет перенесён.`;
+      $('backup-note').textContent = '';
+      $('backup-preview').hidden = false;
+      $('apply-backup').focus();
+    } catch (error) {
+      $('backup-note').textContent = error instanceof SyntaxError ? 'Файл повреждён. Выберите другую копию Wordflow.' : error.message;
+      event.target.value = '';
+    }
+  });
+  $('apply-backup').addEventListener('click', () => {
+    if (!pending) return;
+    const old = Object.create(null);
+    try {
+      keys.forEach(key => { old[key] = localStorage.getItem(key); });
+      // Keep a recovery copy in this same browser before replacing any data.
+      localStorage.setItem('wordflow.backup.previous.v1', JSON.stringify(old));
+      keys.forEach(key => localStorage.setItem(key, pending[key]));
+    } catch {
+      keys.forEach(key => { if (Object.hasOwn(old, key)) { try { old[key] === null ? localStorage.removeItem(key) : localStorage.setItem(key, old[key]); } catch {} } });
+      $('backup-note').textContent = 'Не удалось загрузить копию. Проверьте доступ к памяти браузера и попробуйте ещё раз.';
+      return;
+    }
+    location.reload();
+  });
+})();
 </script>
 
 <script>

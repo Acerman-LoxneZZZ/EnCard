@@ -12,7 +12,7 @@ const {chromium,webkit}=require('./browser-runtime/node_modules/playwright');con
  const r=await page.locator('#word-sound').boundingBox();
  for(const [x,y] of [[r.x+r.width/2,r.y+r.height/2],[r.x+2,r.y+2],[r.x+r.width-2,r.y+r.height-2],[r.x-5,r.y+r.height/2]]){
  const before=await page.evaluate(()=>calls.length);await page.touchscreen.tap(x,y);await page.waitForTimeout(100);
- const result=await page.evaluate(()=>({flipped,count:calls.length,active:calls.at(-1)?.active,dragging:!!drag}));
+ const result=await page.evaluate(()=>({flipped,count:calls.length,active:calls.at(-1)?.active,dragging:!!cardTap}));
  assert.deepEqual(result,{flipped:true,count:before+1,active:true,dragging:false});
  }
  assert.deepEqual(errors,[]);
