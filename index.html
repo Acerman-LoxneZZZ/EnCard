@@ -309,7 +309,7 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .effects-off .queued-card { transition:none!important; }
 .card-tilt { position: relative; inset: 0; transform-style: preserve-3d; transform: rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); transition: transform .35s var(--ease); }
 .card-inner { position: relative; display: grid; height: 380px; inset: 0; transform-origin: center; }
-.deck.turning .card-inner { will-change: transform; }
+.deck.turning .card-inner { will-change: transform; transform-style: preserve-3d; }
 .deck.turning .card-tilt { transform: none; transition: none; }
 .face { position: relative; grid-area: 1 / 1; min-height: 0; height: 100%; inset: 0; border-radius: 24px; backface-visibility: hidden; -webkit-backface-visibility: hidden; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(ellipse at 8% 0%, #71618425, transparent 65%), linear-gradient(130deg, #292c3b, #1c212d 72%, #242735); box-shadow: inset 0 1px 0 #efdbff2b, inset 1px 0 0 #d4c0ff12, inset 0 -1px 0 #ffffff0c, 0 24px 60px #00000050; }
 .face::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5; background: radial-gradient(ellipse at var(--light-x,50%) var(--light-y,0%), #e6d8ff16, transparent 57%); transition: opacity .25s; }
@@ -336,6 +336,10 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .back-sound[hidden] { display: none; }
 .back-sound svg { pointer-events: none; }
 .face[aria-hidden="true"] { display: none; visibility: hidden; pointer-events: none; }
+.deck.turning .face { display: flex; visibility: visible; will-change: transform; }
+.deck.turning .flip-outgoing { transform: rotateY(0deg) translateZ(.1px); }
+.deck.turning .flip-incoming { transform: rotateY(180deg) translateZ(.1px); }
+.deck.turning .sound { pointer-events: none; }
 .translation { font-size: clamp(26px,4vw,36px); font-weight: 500; line-height: 1.2; letter-spacing: -.035em; text-wrap: balance; }
 
 
@@ -605,6 +609,8 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 button:disabled::after { opacity: .15; animation-play-state: paused; }
 .effects-off .face::before,.effects-off .queued-card::before,.effects-off button::after { animation: none; }
 .page-hidden .face::before,.page-hidden .queued-card::before,.page-hidden button::after { animation-play-state: paused; }
+.card-turning .face::before,.card-turning .queued-card::before,.card-turning button::after,
+.card-turning .ambient::before,.card-turning .ambient::after { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .face::before,.queued-card::before,button::after { animation: none !important; } }
 
 /* A full-screen luminous grid with a quiet reading zone. */
@@ -1239,6 +1245,10 @@ function setFlipped(value, moveFocus = false, animate = true) {
   if (flipAnimation) { flipAnimation.onfinish = null; flipAnimation.cancel(); flipAnimation = null; }
   flipping = false;
   $('deck').classList.remove('turning');
+  document.body.classList.remove('card-turning');
+  $('front').classList.remove('flip-incoming', 'flip-outgoing');
+  $('back').classList.remove('flip-incoming', 'flip-outgoing');
+  const wasFlipped = flipped;
   flipped = value;
   const reveal = () => {
     card.classList.toggle('flipped', value);
@@ -1251,25 +1261,27 @@ function setFlipped(value, moveFocus = false, animate = true) {
   if (!changed || !animate || !moving() || !inner.animate) { reveal(); return; }
   resetTilt();
   flipping = true;
+  $(wasFlipped ? 'back' : 'front').classList.add('flip-outgoing');
+  $(value ? 'back' : 'front').classList.add('flip-incoming');
   $('deck').classList.add('turning');
+  document.body.classList.add('card-turning');
   const direction = value ? 1 : -1;
-  // Меняем единственную видимую поверхность строго в положении ребром.
-  // Динамик остаётся внутри неё и поворачивается вместе с карточкой.
-  flipAnimation = inner.animate([
-    {transform: 'rotateY(0deg) scale(1)'},
-    {transform: `rotateY(${direction * 90}deg) scale(.97)`}
-  ], {duration: 320, easing: 'cubic-bezier(.45,0,.7,1)', fill: 'forwards'});
-  flipAnimation.onfinish = () => {
-    flipAnimation.cancel();
+  // Prepare both faces once. Backface culling swaps the visible side on the
+  // compositor, without a JS callback, layout or re-rasterization at 90 degrees.
+  const animation = inner.animate([
+    {transform: 'rotateY(0deg)'},
+    {transform: `rotateY(${direction * 180}deg)`}
+  ], {duration: 640, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards'});
+  flipAnimation = animation;
+  animation.onfinish = () => {
+    if (flipAnimation !== animation) return;
+    animation.onfinish = null;
     reveal();
-    flipAnimation = inner.animate([
-      {transform: `rotateY(${-direction * 90}deg) scale(.97)`},
-      {transform: 'rotateY(0deg) scale(1)'}
-    ], {duration: 480, easing: 'cubic-bezier(.2,.7,.25,1)', fill: 'forwards'});
-    flipAnimation.onfinish = () => {
-      flipAnimation.cancel(); flipAnimation = null; flipping = false;
-      $('deck').classList.remove('turning');
-    };
+    animation.cancel(); flipAnimation = null; flipping = false;
+    $('deck').classList.remove('turning');
+    document.body.classList.remove('card-turning');
+    $('front').classList.remove('flip-incoming', 'flip-outgoing');
+    $('back').classList.remove('flip-incoming', 'flip-outgoing');
   };
 }
 function updateControls() {
@@ -1999,7 +2011,7 @@ applyEffects(); save(); render(true);
   let width = 0, height = 0, frame = 0, last = 0, clock = 0;
   let touchX = 0, touchY = 0, touchAt = -10000;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const active = () => !document.hidden && !reduced.matches && !document.body.classList.contains('effects-off');
+  const active = () => !document.hidden && !reduced.matches && !document.body.classList.contains('effects-off') && !document.body.classList.contains('card-turning');
   function draw() {
     ctx.clearRect(0, 0, width, height);
     const spacing = Math.max(width < 650 ? 24 : 32, Math.sqrt(width * height / 2200));
