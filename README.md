@@ -55,7 +55,7 @@ npm.cmd run dev
 Сам токен нигде не нужен и не должен попадать в репозиторий.
 
 ```powershell
-node --test scripts/profiles.test.mjs scripts/card-input.test.mjs
+node --test scripts/profiles.test.mjs scripts/card-input.test.mjs scripts/word-list.test.mjs
 npm.cmd run db:generate
 npm.cmd run build
 npm.cmd start -- --port 4173

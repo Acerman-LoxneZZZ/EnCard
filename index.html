@@ -238,10 +238,10 @@ SOFTWARE.
 html { min-width: 320px; background: var(--bg); overflow-x: clip; scrollbar-gutter: stable; scrollbar-color: #4a4563 var(--bg); }
 body { margin: 0; min-height: 100svh; font: 14px/1.5 'Manrope', 'Segoe UI', sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; overflow-x: clip; background: radial-gradient(ellipse at 50% 42%, #23233570, transparent 65%), var(--bg); }
 body::before { content: ''; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 52%, rgba(var(--tint), .17), transparent 65%); opacity: var(--intensity); transition: opacity .2s; }
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 button { color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 button:disabled { opacity: .35; cursor: default; }
-button, a, input { outline-offset: 5px; }
+button, a, input, textarea { outline-offset: 5px; }
 :focus-visible { outline: 2px solid var(--accent); }
 button svg { pointer-events: none; }
 svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; vertical-align: middle; }
@@ -422,6 +422,24 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .add-word-button:hover { background: #c4b6f53d; }
 .add-word-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .add-word-form p { margin: 13px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.word-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; touch-action: pan-y pinch-zoom; }
+.word-entry-heading h2 { margin: 0; }
+.word-entry-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: #111723; }
+.word-entry-tabs button { min-height: 40px; padding: 8px 15px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 13px; transition: background .18s, color .18s; }
+.word-entry-tabs button[aria-selected="true"] { background: #c4b6f51a; color: var(--text); }
+.word-entry-tabs button:hover { color: var(--text); }
+.bulk-word-label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+.bulk-word-input { display: block; width: 100%; min-height: 176px; max-height: 420px; resize: vertical; padding: 13px 14px; border: 1px solid #ffffff27; border-radius: 10px; background: #111723; color: var(--text); font-size: 16px; line-height: 1.7; caret-color: var(--accent); scrollbar-width: thin; }
+.bulk-word-input[aria-invalid="true"] { border-color: var(--red); }
+.add-word-form .bulk-word-error { color: var(--red); white-space: pre-line; }
+.bulk-word-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; }
+.bulk-word-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.add-word-form .word-entry-result { color: var(--green); }
+@media (max-width: 650px) {
+  .word-entry-heading { flex-direction: column; align-items: stretch; gap: 14px; }
+  .word-entry-tabs button { min-height: 44px; }
+  .bulk-word-actions .add-word-button { min-height: 48px; }
+}
 .active-collection.dictionary-trigger { position: relative; z-index: 5; display: flex; width: fit-content; max-width: min(100%, 528px); margin: 14px auto -8px; padding: 8px 14px; min-height: 44px; border-radius: 14px; background: #c4b6f50b; color: #d0c6ea; font-size: 13px; }
 .collection-toolbar { display: flex; align-items: center; gap: 12px; }
 .collection-select-label { flex: 1; min-width: 0; }
@@ -698,7 +716,19 @@ html.in-telegram body { min-height: var(--tg-viewport-stable-height, 100svh); }
   <p id="picker-empty" class="picker-empty" hidden></p>
   <button type="button" class="primary-action" id="add-picked" disabled>Добавить выбранные</button>
 </section>
-<form id="add-word-form" class="add-word-form" autocomplete="off"><h2>Добавить слово</h2><div class="add-word-fields"><label>Английское слово<input id="custom-en" name="en" lang="en" required maxlength="80" spellcheck="false"></label><label>Перевод<input id="custom-ru" name="ru" required maxlength="120"></label><button type="submit" class="add-word-button">Добавить</button></div><p id="add-word-note"></p></form><label class="search"><span class="sr-only">Поиск по слову или переводу</span><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="word-search" placeholder="Найти слово или перевод" autocomplete="off" spellcheck="false"></label><div class="filters" role="group" aria-label="Фильтр слов"><button type="button" class="filter" data-filter="all" aria-pressed="true">Все <span id="filter-all-count">20</span></button><button type="button" class="filter" data-filter="learned" aria-pressed="false">Выучены <span id="filter-learned-count">0</span></button><button type="button" class="filter" data-filter="review" aria-pressed="false">На повторении <span id="filter-review-count">0</span></button></div><ul class="word-list" id="word-list"></ul><p class="library-empty" id="library-empty" hidden>Таких слов пока нет.<br>Попробуйте другой запрос или фильтр.</p><p class="library-count" id="library-count" role="status"></p></section>
+<section class="add-word-form" id="word-entry" aria-labelledby="word-entry-title">
+  <div class="word-entry-heading"><h2 id="word-entry-title">Добавить слова</h2><div class="word-entry-tabs" role="tablist" aria-label="Способ добавления слов"><button type="button" id="word-entry-single" role="tab" aria-selected="true" aria-controls="add-word-form" data-word-entry="single">По одному</button><button type="button" id="word-entry-bulk" role="tab" aria-selected="false" aria-controls="bulk-word-form" tabindex="-1" data-word-entry="bulk">Списком</button></div></div>
+  <form id="add-word-form" role="tabpanel" aria-labelledby="word-entry-single" autocomplete="off"><div class="add-word-fields"><label>Английское слово<input id="custom-en" name="en" lang="en" required maxlength="80" spellcheck="false"></label><label>Перевод<input id="custom-ru" name="ru" required maxlength="120"></label><button type="submit" class="add-word-button">Добавить</button></div><p id="add-word-note"></p></form>
+  <form id="bulk-word-form" role="tabpanel" aria-labelledby="word-entry-bulk" autocomplete="off" hidden>
+    <label class="bulk-word-label" for="bulk-words">Слова и переводы</label>
+    <textarea class="bulk-word-input" id="bulk-words" name="words" rows="6" maxlength="120000" spellcheck="false" aria-describedby="bulk-word-help bulk-word-note bulk-word-error"></textarea>
+    <p id="bulk-word-help">Одна пара на строке. Между английским словом и переводом — разделитель с пробелами с обеих сторон.</p>
+    <p id="bulk-word-note"></p>
+    <p id="bulk-word-error" class="bulk-word-error" role="alert" hidden></p>
+    <div class="bulk-word-actions"><span id="bulk-word-count" class="bulk-word-count" aria-live="polite"></span><button type="submit" class="add-word-button" id="add-bulk-words" disabled>Добавить слова</button></div>
+  </form>
+  <p id="word-entry-result" class="word-entry-result" role="status" hidden></p>
+</section><label class="search"><span class="sr-only">Поиск по слову или переводу</span><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="word-search" placeholder="Найти слово или перевод" autocomplete="off" spellcheck="false"></label><div class="filters" role="group" aria-label="Фильтр слов"><button type="button" class="filter" data-filter="all" aria-pressed="true">Все <span id="filter-all-count">20</span></button><button type="button" class="filter" data-filter="learned" aria-pressed="false">Выучены <span id="filter-learned-count">0</span></button><button type="button" class="filter" data-filter="review" aria-pressed="false">На повторении <span id="filter-review-count">0</span></button></div><ul class="word-list" id="word-list"></ul><p class="library-empty" id="library-empty" hidden>Таких слов пока нет.<br>Попробуйте другой запрос или фильтр.</p><p class="library-count" id="library-count" role="status"></p></section>
 <section class="help" id="help" hidden aria-labelledby="help-title"><div class="help-head"><h2 id="help-title" tabindex="-1">Маленькая инструкция</h2><button type="button" class="icon-button" id="close-help" aria-label="Закрыть инструкцию"><svg aria-hidden="true"><use href="#i-x"/></svg></button></div><label class="shortcut-toggle"><input type="checkbox" id="shortcuts-toggle" checked>Использовать горячие клавиши</label><dl class="help-grid"><dt>Перевернуть карточку</dt><dd><kbd>Пробел</kbd></dd><dt>Не знаю — в конец колоды</dt><dd><kbd>←</kbd> / <kbd>1</kbd></dd><dt>Трудно — после трёх карточек</dt><dd><kbd>↓</kbd> / <kbd>2</kbd></dd><dt>Знаю — слово выучено</dt><dd><kbd>→</kbd> / <kbd>3</kbd></dd><dt>Отменить последний ответ</dt><dd><kbd>Z</kbd></dd><dt>Послушать слово</dt><dd><kbd>S</kbd></dd></dl><p>Смахивайте влево, вправо или вниз. Свайп вниз — «Трудно». На лицевой стороне русский перевод. Первая английская буква появляется только при возвращении слова, отмеченного «Трудно». Нажмите, чтобы увидеть ответ. Если осталось меньше четырёх слов, сложное слово вернётся после всех остальных. Озвучка использует английские голоса вашего браузера.</p></section>
 </main>
 </div><div id="dictionary-menu" class="dictionary-menu" role="listbox" aria-label="Словари" hidden></div><div class="celebration" id="celebration" aria-hidden="true"></div><div class="toast" id="toast" role="status"></div><div class="sr-only" id="announcement" aria-live="polite" aria-atomic="true"></div>
@@ -878,6 +908,7 @@ function commitCollections(next) {
 function selectCollection(id) {
   if (id !== 'all' && !collections.some(item => item.id === id)) return;
   browsingCollectionId = id; filter = 'all';
+  $('word-entry-result').hidden = true;
   $('word-search').value = ''; $('collection-editor').hidden = true; $('word-picker').hidden = true;
   renderLibrary();
 }
@@ -953,6 +984,9 @@ function renderCollectionControls() {
   $('add-word-note').textContent = browsingCollectionId === 'all'
     ? 'Слово сохранится в общем словаре.'
     : `Слово попадёт в «${collectionName(browsingCollectionId)}» и в общий словарь.`;
+  $('bulk-word-note').textContent = browsingCollectionId === 'all'
+    ? 'Слова сохранятся в общем словаре. Повторы не добавятся.'
+    : `Слова попадут в «${collectionName(browsingCollectionId)}» и в общий словарь. Повторы не добавятся.`;
   document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
 }
 function studyCollection(id = browsingCollectionId, restartCompleted = true) {
@@ -1662,6 +1696,114 @@ function addWord(event) {
   toast(attached ? `Добавлено: ${en}.` : `«${en}» сохранено только в общем словаре. Не удалось сохранить подборку.`);
   void lookupRecording(word);
 }
+// Parse the whole list before writing anything, retaining original line numbers.
+function parseWordList(text) {
+  const entries = [], errors = [];
+  const lines = text.split(/\r\n?|\n/);
+  lines.forEach((line, index) => {
+    if (!line.trim()) return;
+    const pair = line.trim().match(/^(.+?)\s+[^\p{L}\p{N}\s]+\s+(.+)$/u);
+    if (!pair) {
+      errors.push(`Строка ${index + 1}: нужен разделитель с пробелами между словом и переводом.`);
+      return;
+    }
+    const en = pair[1].trim().replace(/\s+/g, ' '), ru = pair[2].trim().replace(/\s+/g, ' ');
+    if (en.length > 80 || ru.length > 120) {
+      errors.push(`Строка ${index + 1}: английское слово — до 80 символов, перевод — до 120.`);
+      return;
+    }
+    entries.push({en, ru});
+  });
+  if (!entries.length && !errors.length) errors.push('Вставьте слова и переводы — каждую пару на новой строке.');
+  if (entries.length > 500) errors.push('За один раз можно добавить до 500 строк.');
+  return {entries, errors};
+}
+// End of list parser.
+let wordEntryMode = 'single', wordEntryAnimation = null, wordEntrySwipe = null;
+function setWordEntryMode(mode, focusTab = false) {
+  if (!['single','bulk'].includes(mode) || mode === wordEntryMode) return;
+  const direction = mode === 'bulk' ? 1 : -1;
+  wordEntryAnimation?.cancel(); wordEntryAnimation = null;
+  wordEntryMode = mode;
+  const panel = $(mode === 'bulk' ? 'bulk-word-form' : 'add-word-form');
+  $('add-word-form').hidden = mode !== 'single';
+  $('bulk-word-form').hidden = mode !== 'bulk';
+  $('word-entry-result').hidden = true;
+  document.querySelectorAll('[data-word-entry]').forEach(tab => {
+    const selected = tab.dataset.wordEntry === mode;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+  });
+  if (focusTab) $(`word-entry-${mode}`).focus({preventScroll:true});
+  if (moving() && panel.animate) wordEntryAnimation = panel.animate([
+    {transform:`translateX(${direction * 12}px)`}, {transform:'translateX(0)'}
+  ], {duration:220, easing:'cubic-bezier(.16,1,.3,1)'});
+}
+function updateBulkDraft() {
+  $('bulk-word-error').hidden = true;
+  $('bulk-words').removeAttribute('aria-invalid');
+  $('word-entry-result').hidden = true;
+  const count = $('bulk-words').value.split(/\r\n?|\n/).filter(line => line.trim()).length;
+  $('bulk-word-count').textContent = count ? `Строк: ${count}` : '';
+  $('add-bulk-words').disabled = !count;
+}
+function showBulkError(message) {
+  $('bulk-word-error').textContent = message; $('bulk-word-error').hidden = false;
+  $('bulk-words').setAttribute('aria-invalid', 'true');
+  $('bulk-words').focus({preventScroll:true});
+}
+function addWordList(event) {
+  event.preventDefault();
+  const {entries, errors} = parseWordList($('bulk-words').value);
+  if (errors.length) { showBulkError(errors.slice(0,3).join('\n') + (errors.length > 3 ? `\nДругих ошибок: ${errors.length - 3}.` : '')); return; }
+  const known = new Map(WORDS.map(word => [word.en.toLocaleLowerCase('en'), word.id]));
+  const newWords = [], ids = new Set();
+  entries.forEach(({en,ru}) => {
+    const key = en.toLocaleLowerCase('en');
+    if (!known.has(key)) {
+      const id = WORDS.length + newWords.length;
+      known.set(key, id);
+      newWords.push({id,en,ru,ipa:transcriptionFor(en),audioUrl:'',audioCredit:'',audioSource:''});
+    }
+    ids.add(known.get(key));
+  });
+  if (WORDS.length - BUILTIN_COUNT + newWords.length > 500) {
+    showBulkError(`Можно сохранить до 500 собственных слов. Свободных мест: ${500 - WORDS.length + BUILTIN_COUNT}. Уменьшите список.`); return;
+  }
+  const members = collectionWordIds(browsingCollectionId);
+  const added = [...ids].filter(id => !members.includes(id)).length;
+  if (!added) {
+    $('word-entry-result').textContent = 'Все слова уже есть в этом словаре.';
+    $('word-entry-result').hidden = false; return;
+  }
+  const nextCollections = collections.map(item => item.id === browsingCollectionId
+    ? {...item,wordIds:[...new Set([...item.wordIds,...ids])]} : item);
+  const sessions = {...collectionSessions,[activeCollectionId]:state};
+  sessions.all = reconcileSession(sessions.all, [...WORDS,...newWords].map(word => word.id));
+  if (browsingCollectionId !== 'all') {
+    const selected = nextCollections.find(item => item.id === browsingCollectionId);
+    sessions[browsingCollectionId] = reconcileSession(sessions[browsingCollectionId],selected.wordIds);
+  }
+  const changes = {
+    [CUSTOM_KEY]:JSON.stringify([...WORDS.slice(BUILTIN_COUNT),...newWords].map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) => ({en,ru,ipa,audioUrl,audioCredit,audioSource}))),
+    [STORAGE_KEY]:JSON.stringify(sessions.all),
+    [COLLECTIONS_KEY]:JSON.stringify({items:nextCollections,activeId:activeCollectionId,sessions:Object.fromEntries(nextCollections.map(item => [item.id,sessions[item.id]]))})
+  };
+  const old = Object.create(null), written = [];
+  try {
+    Object.keys(changes).forEach(key => { old[key] = localStorage.getItem(key); });
+    Object.entries(changes).forEach(([key,value]) => { localStorage.setItem(key,value); written.push(key); });
+  } catch {
+    written.forEach(key => { try { old[key] === null ? localStorage.removeItem(key) : localStorage.setItem(key,old[key]); } catch {} });
+    showBulkError('Не удалось сохранить список. Проверьте память устройства и попробуйте ещё раз. Текст остался в форме.'); return;
+  }
+  WORDS.push(...newWords); collections = nextCollections; collectionSessions = sessions;
+  state = sessions[activeCollectionId]; previous = null; storageAvailable = true;
+  render(); renderLibrary();
+  $('bulk-word-form').reset(); updateBulkDraft();
+  const skipped = entries.length - added;
+  $('word-entry-result').textContent = `Добавлено в словарь: ${added}.` + (skipped ? ` Уже были или повторялись: ${skipped}.` : '');
+  $('word-entry-result').hidden = false;
+}
 function toggleLibrary(open, collectionId = activeCollectionId) {
   if (busy || navigationPending || libraryOpen === open) return;
   if (!open && !collectionWordIds().length) { toast('Этот словарь пуст. Добавьте слова или выберите другой.'); return; }
@@ -1736,6 +1878,29 @@ document.querySelectorAll('[data-filter]').forEach(button => button.addEventList
 }));
 $('close-help').addEventListener('click', () => setHelp(false));
 $('add-word-form').addEventListener('submit', addWord);
+$('bulk-word-form').addEventListener('submit', addWordList);
+$('bulk-words').addEventListener('input', updateBulkDraft);
+document.querySelectorAll('[data-word-entry]').forEach(tab => {
+  tab.addEventListener('click', () => setWordEntryMode(tab.dataset.wordEntry));
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const mode = event.key === 'Home' ? 'single' : event.key === 'End' ? 'bulk' : wordEntryMode === 'single' ? 'bulk' : 'single';
+    setWordEntryMode(mode,true);
+  });
+});
+$('word-entry').addEventListener('pointerdown', event => {
+  wordEntrySwipe = null;
+  if (event.pointerType !== 'touch' || !event.isPrimary || event.target.closest('input,textarea,button,a')) return;
+  wordEntrySwipe = {id:event.pointerId,x:event.clientX,y:event.clientY};
+});
+$('word-entry').addEventListener('pointerup', event => {
+  if (!wordEntrySwipe || wordEntrySwipe.id !== event.pointerId) return;
+  const dx = event.clientX - wordEntrySwipe.x, dy = event.clientY - wordEntrySwipe.y;
+  wordEntrySwipe = null;
+  if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.5) setWordEntryMode(dx < 0 ? 'bulk' : 'single');
+});
+$('word-entry').addEventListener('pointercancel', () => { wordEntrySwipe = null; });
 $('shortcuts-toggle').checked = shortcutsEnabled;
 $('shortcuts-toggle').addEventListener('change',()=>{shortcutsEnabled=$('shortcuts-toggle').checked;savePreferences();});
 motionReduced.addEventListener?.('change',applyEffects);
