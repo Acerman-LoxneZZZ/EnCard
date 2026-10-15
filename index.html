@@ -280,6 +280,14 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 /* Clip exiting cards at the screen edges without extending page scroll bounds. */
 .deck-viewport { position: relative; overflow: hidden; contain: paint; width: var(--viewport-width, 100vw); padding: 120px calc((var(--viewport-width, 100vw) - 100%) / 2); margin: -120px calc((100% - var(--viewport-width, 100vw)) / 2); pointer-events: none; }
 .deck { pointer-events: auto; }
+.card-flight { position: fixed; inset: 0; z-index: 8; overflow: hidden; contain: strict; pointer-events: none; }
+.card-flight .card { position: absolute; margin: 0; pointer-events: none; will-change: transform; }
+.card-flight button:disabled { opacity: 1; }
+.study.is-answering :is(.answer,.undo):disabled { opacity: 1; }
+.study.is-answering .answer:disabled::after { opacity: .65; animation-play-state: running; }
+.study.is-answering .answer.is-selected { opacity: 1; background: rgba(var(--tint), .18); }
+.app.is-answering :is(.library-button,.dictionary-trigger):disabled { opacity: 1; }
+.app.is-answering :is(.library-button,.dictionary-trigger):disabled::after { opacity: .4; animation-play-state: running; }
 
 
 
@@ -291,7 +299,7 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .deck::before { inset: 20px 23px -20px; background: #191e2b; transform: rotate(2deg); box-shadow: inset 0 -1px 0 #b6c8f21a, 0 25px 40px #00000030; z-index: -3; }
 .deck.last-card::before, .deck.last-card::after { opacity: 0; }
 .card { position: relative; z-index: 1; perspective: 1500px; cursor: pointer; user-select: none; touch-action: pan-y pinch-zoom; -webkit-tap-highlight-color: transparent; transform: translate3d(0,0,0); transform-style: preserve-3d; transition: transform .45s var(--ease), opacity .2s; }
-.queued-card { position:absolute; inset:0; z-index:-1; border-radius:24px; padding:60px 22px 86px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:13px; text-align:center; background:radial-gradient(ellipse at 8% 0%,#71618425,transparent 65%),linear-gradient(130deg,#292c3b,#1c212d 72%,#242735); box-shadow:inset 0 1px 0 #efdbff2b,0 18px 36px #0003; transform:translateY(16px) scale(.94) rotate(-2deg); transition:transform var(--exit-duration, .6s) cubic-bezier(.2,.7,.25,1); pointer-events:none; }
+.queued-card { position:absolute; inset:0; z-index:-1; border-radius:24px; display:flex; flex-direction:column; text-align:center; background:radial-gradient(ellipse at 8% 0%,#71618425,transparent 65%),linear-gradient(130deg,#292c3b,#1c212d 72%,#242735); box-shadow:inset 0 1px 0 #efdbff2b,inset 1px 0 0 #d4c0ff12,inset 0 -1px 0 #ffffff0c,0 24px 60px #00000050; transform:translateY(12px) scale(.97) rotate(-.5deg); transition:transform var(--exit-duration, .52s) var(--ease); pointer-events:none; }
 .queued-card > * { visibility: hidden; }
 .deck.advancing:not(.turning) .queued-card > * { visibility: visible; }
 .queue-word,.front .prompt-word { font-size:clamp(29px,4.3vw,42px); font-weight:500; line-height:1.2; letter-spacing:-.035em; text-wrap:balance; }
@@ -410,12 +418,6 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .add-word-button:hover { background: #c4b6f53d; }
 .add-word-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .add-word-form p { margin: 13px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.audio-credit { color: #a9a6bc; font-size: 11px; text-decoration: underline; text-decoration-color: #a9a6bc66; text-underline-offset: 3px; }
-.audio-credit:hover { color: var(--text); }
-.audio-credit:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.audio-credit-slot { height: 40px; padding-top: 7px; overflow: hidden; }
-.audio-credit { display: block; width: fit-content; max-width: 100%; margin: 0 0 0 auto; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
-.audio-credit[hidden] { display: none; }
 .active-collection.dictionary-trigger { position: relative; z-index: 5; display: flex; width: fit-content; max-width: min(100%, 528px); margin: 14px auto -8px; padding: 8px 14px; min-height: 44px; border-radius: 14px; background: #c4b6f50b; color: #d0c6ea; font-size: 13px; }
 .collection-toolbar { display: flex; align-items: center; gap: 12px; }
 .collection-select-label { flex: 1; min-width: 0; }
@@ -516,8 +518,6 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
   .study-footer { justify-content: center; flex-wrap: wrap; gap: 0 10px; margin-top: 10px; padding: 0; border: 0; }
   .undo { min-height: 44px; padding-inline: 10px; font-size: 12px; }
   .save-note { font-size: 12px; }
-  .audio-credit-slot { height: 40px; padding-top: 0; flex-shrink: 0; }
-  .audio-credit { margin-inline: auto; min-height: 32px; padding-block: 8px; font-size: 11px; text-align: center; }
   .toast { bottom: max(18px, env(safe-area-inset-bottom)); }
   .library { width: 100%; margin-top: 28px; }
   .collection-toolbar { flex-wrap: wrap; gap: 10px; }
@@ -587,14 +587,14 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 /* White shimmer follows the edges without covering the word. */
 @property --edge-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 @keyframes edge-shimmer { to { --edge-angle: 360deg; } }
-.face::before,
+.face::before,.queued-card::before,
 :is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter)::after {
  content: ''; position: absolute; inset: 0; z-index: 3; padding: 1px; border-radius: inherit; pointer-events: none;
  background: conic-gradient(from var(--edge-angle), #ffffff18 0deg, #ffffff30 55deg, #ffffffa6 85deg, #fff 100deg, #ffffff30 125deg, #ffffff18 180deg, #ffffff70 265deg, #ffffff18 310deg);
  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
  opacity: .65; animation: edge-shimmer 9s linear infinite; transition: opacity .2s;
 }
-.face::before { padding: 1.5px; opacity: .9; }
+.face::before,.queued-card::before { padding: 1.5px; opacity: .9; }
 :is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter) { position: relative; }
 .answer { box-shadow: inset 0 0 12px #ffffff07, 0 0 12px #ffffff08; }
 .answer:hover:not(:disabled) { box-shadow: inset 0 0 16px #ffffff0c, 0 0 18px #ffffff15; }
@@ -603,9 +603,9 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 :is(.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter)::after { opacity: .4; animation-duration: 12s; }
 :is(.answer,.sound,.icon-button,.library-button,.dictionary-trigger,.primary-action,.secondary-action,.add-word-button,.restart,.filter):hover:not(:disabled)::after { opacity: .95; }
 button:disabled::after { opacity: .15; animation-play-state: paused; }
-.effects-off .face::before,.effects-off button::after { animation: none; }
-.page-hidden .face::before,.page-hidden button::after { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .face::before,button::after { animation: none !important; } }
+.effects-off .face::before,.effects-off .queued-card::before,.effects-off button::after { animation: none; }
+.page-hidden .face::before,.page-hidden .queued-card::before,.page-hidden button::after { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .face::before,.queued-card::before,button::after { animation: none !important; } }
 
 /* A full-screen luminous grid with a quiet reading zone. */
 #light-grid { display: block; width: 100%; height: 100%; opacity: .85;
@@ -657,14 +657,14 @@ html.in-telegram body { min-height: var(--tg-viewport-stable-height, 100svh); }
 <main id="screen-stage">
 <section id="session" aria-label="Изучение слов">
   <div class="study">
-    <div class="deck-viewport"><div class="deck" id="deck"><div class="queued-card" id="queued-card" aria-hidden="true" inert><span class="queue-word" id="queued-word"></span><span class="letter-hint" id="queued-hint"></span></div><article class="card" id="card" aria-label="Карточка слова"><div class="card-tilt" id="card-tilt"><div class="card-inner" id="card-inner">
+    <div class="deck-viewport"><div class="deck" id="deck"><div class="queued-card" id="queued-card" aria-hidden="true" inert><div class="card-top"><span class="language">Русский</span></div><div class="flip-target"><span class="queue-word" id="queued-word"></span><span class="letter-hint" id="queued-hint"></span></div><div class="card-bottom"></div></div><article class="card" id="card" aria-label="Карточка слова"><div class="card-tilt" id="card-tilt"><div class="card-inner" id="card-inner">
       <div class="face front" id="front"><div class="card-top"><span class="language">Русский</span></div><button type="button" class="flip-target" id="front-flip" aria-labelledby="translation" aria-describedby="front-hint"><span class="translation prompt-word" id="translation">открывать, узнавать</span><span class="letter-hint" id="letter-hint" lang="en" hidden></span></button><div class="card-bottom"><span class="sr-only" id="front-hint">Показать английское слово</span></div></div>
 <div class="face back" id="back" aria-hidden="true" inert><div class="card-top"><span class="language">Английский</span></div><button type="button" class="flip-target" id="back-flip" aria-labelledby="word transcription" aria-describedby="back-hint"><span class="word" id="word" lang="en">discover</span><span class="transcription" id="transcription">/dɪˈskʌvə/</span></button><div class="card-bottom"><span class="sr-only" id="back-hint">Вернуться к русскому слову</span><button type="button" class="sound back-sound" id="word-sound" aria-label="Произнести английское слово" title="Послушать слово" hidden><svg aria-hidden="true"><use href="#i-sound"/></svg></button></div></div>
 </div></div><span class="stamp" id="stamp-yes" aria-hidden="true">Знаю</span><span class="stamp no" id="stamp-no" aria-hidden="true">Не знаю</span><span class="stamp hard" id="stamp-hard" aria-hidden="true">Трудно</span></article></div></div>
     
     <div class="actions" aria-label="Оцените знание слова"><button type="button" class="answer answer-no" data-answer="no"><svg aria-hidden="true"><use href="#i-x"/></svg>Не знаю</button><button type="button" class="answer answer-hard" data-answer="hard"><svg aria-hidden="true"><use href="#i-hard"/></svg>Трудно</button><button type="button" class="answer answer-yes" data-answer="yes"><svg aria-hidden="true"><use href="#i-check"/></svg>Знаю</button></div>
     
-    <div class="study-footer"><button type="button" class="undo" id="undo" disabled><svg aria-hidden="true"><use href="#i-undo"/></svg>Отменить ответ</button><span class="save-note" hidden><svg aria-hidden="true"><use href="#i-check"/></svg><span id="save-note">Прогресс сохранён</span></span></div><div class="audio-credit-slot"><a id="audio-credit" class="audio-credit" href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer" hidden></a></div>
+    <div class="study-footer"><button type="button" class="undo" id="undo" disabled><svg aria-hidden="true"><use href="#i-undo"/></svg>Отменить ответ</button><span class="save-note" hidden><svg aria-hidden="true"><use href="#i-check"/></svg><span id="save-note">Прогресс сохранён</span></span></div>
   </div>
 </section>
 <section class="finish" id="finish" hidden aria-labelledby="finish-title"><div class="finish-icon"><svg aria-hidden="true"><use href="#i-check"/></svg></div><h1 id="finish-title" tabindex="-1">Все слова — ваши.</h1><p>Колода пройдена. Даже сложные слова<br>стали немного ближе.</p><div class="stats"><div class="stat"><strong id="easy-count">0</strong><span>Дались легко</span></div><div class="stat"><strong id="hard-count">0</strong><span>Потребовали повторения</span></div></div><p class="stats-note">«Легко» — ответ «Знаю» с первой попытки.</p><button type="button" class="restart" id="restart"><svg aria-hidden="true"><use href="#i-flip"/></svg>Пройти заново</button><button type="button" class="undo" id="finish-undo"><svg aria-hidden="true"><use href="#i-undo"/></svg>Отменить последний ответ</button><p class="finish-extra" id="finish-extra"></p><details class="finish-review" id="finish-review" hidden><summary>Слова, которым стоило уделить время</summary><ul class="review-words" id="review-words"></ul></details></section>
@@ -1159,6 +1159,7 @@ const precisePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
 const fresh = (ids = collectionWordIds()) => ({ queue: [...ids], learned: [], difficult: [], hinted: [], attempts: 0, streak: 0, bestStreak: 0 });
 let state = fresh(), previous = null, busy = false, flipped = false, cardTap = null;
 let flipping = false, flipAnimation = null;
+let finishCardTransition = null;
 let suppressClickUntil = 0, toastTimer = 0, transitionTimer = 0, tiltFrame = 0, speechToken = 0, speechWatchdog = 0, activeAudio = null, activeUtterance = null;
 let storageAvailable = true, effectsEnabled = true, shortcutsEnabled = true, libraryOpen = false, filter = 'all';
 const card = $('card'), tilt = $('card-tilt'), inner = $('card-inner');
@@ -1215,7 +1216,7 @@ function announce(message) { $('announcement').textContent = message; }
 function moving() { return effectsEnabled && !motionReduced.matches; }
 function applyEffects() {
   document.body.classList.toggle('effects-off', !moving());
-  if (!moving()) { settleScreenTransition(); closeDictionaryMenu(); setFlipped(flipped, false, false); resetTilt(); $('celebration').replaceChildren(); }
+  if (!moving()) { finishCardTransition?.(); settleScreenTransition(); closeDictionaryMenu(); setFlipped(flipped, false, false); resetTilt(); $('celebration').replaceChildren(); }
 }
 function resetTilt() {
   cancelAnimationFrame(tiltFrame); tiltFrame = 0;
@@ -1229,7 +1230,7 @@ function resetTint() {
 function tint(kind, amount) {
   const colors = { yes: '145,217,186', no: '242,163,176', hard: '237,196,140' };
   document.body.style.setProperty('--tint', colors[kind]);
-  document.body.style.setProperty('--intensity', String(Math.min(1, amount)));
+  // Keep the screen and card surface unchanged; only the stamp confirms the answer.
   ['yes','no','hard'].forEach(k => $('stamp-' + k).style.opacity = k === kind ? String(Math.min(1,amount)) : '0');
 }
 function setFlipped(value, moveFocus = false, animate = true) {
@@ -1342,7 +1343,6 @@ function render(initial = false) {
   $('word').textContent = word.en; $('transcription').textContent = word.ipa;
   $('transcription').hidden = !word.ipa;
   $('translation').textContent = word.ru;
-  updateAudioCredit(word);
   $('back-flip').setAttribute('aria-labelledby', word.ipa ? 'word transcription' : 'word');
   $('back-flip').setAttribute('aria-describedby', 'back-hint');
   const hint = state.hinted.includes(word.id);
@@ -1370,14 +1370,6 @@ async function fetchJson(url) {
   } finally { clearTimeout(timeout); }
 }
 const audioLookups = new Map();
-function updateAudioCredit(word) {
-  const link = $('audio-credit');
-  link.hidden = !word.audioUrl;
-  if (word.audioUrl) {
-    link.href = word.audioSource || 'https://commons.wikimedia.org/';
-    link.textContent = word.audioCredit ? `Запись: ${word.audioCredit}` : 'Запись: Wikimedia Commons';
-  }
-}
 async function lookupRecording(word) {
   if (word.audioUrl || !('fetch' in window) || !/^[a-z][a-z '\-]*$/i.test(word.en)) return word.audioUrl || '';
   const key = word.en.toLowerCase();
@@ -1400,7 +1392,6 @@ async function lookupRecording(word) {
       word.audioSource = info.descriptionurl || '';
       word.audioCredit = [artist, license].filter(Boolean).join(' · ').slice(0, 120);
       if (word.id >= BUILTIN_COUNT) try { saveCustomWords(); } catch { /* В памяти запись работает. */ }
-      if (state.queue[0] === word.id && !libraryOpen) updateAudioCredit(word);
       return word.audioUrl;
     } catch { return ''; }
   })();
@@ -1502,6 +1493,8 @@ function rate(kind) {
   card.getAnimations?.().forEach(animation => animation.cancel());
   resetTilt(); stopSpeech();
   previous = JSON.parse(JSON.stringify(state));
+  card.closest('.study').classList.add('is-answering');
+  card.closest('.app').classList.add('is-answering');
   updateControls(); tint(kind,1);
   const id = state.queue.shift(); state.attempts++;
   if (kind === 'yes') {
@@ -1519,29 +1512,69 @@ function rate(kind) {
   save();
   // Под уходящей карточкой уже находится следующее слово, а не пустая подложка.
   queuePreview(state.queue[0]);
-  const delay = moving() ? (kind === 'hard' ? 600 : 510) : 0;
-  $('deck').style.setProperty('--exit-duration', `${delay}ms`);
-  void $('queued-card').offsetWidth;
-  $('queued-card').style.transform = 'translateY(0) scale(1) rotate(0deg)';
-  $('deck').classList.add('advancing');
-  card.style.transition = delay ? `transform ${delay}ms cubic-bezier(.3,.15,.3,1)` : 'none';
-  if (delay) {
-    const bounds = $('deck').getBoundingClientRect();
-    const center = bounds.left + bounds.width / 2;
-    const angle = 16 * Math.PI / 180;
-    const extent = (card.offsetWidth * Math.cos(angle) + card.offsetHeight * Math.sin(angle)) / 2 + 100;
-    const distance = kind === 'yes'
-      ? document.documentElement.clientWidth - center + extent
-      : center + extent;
-    const downDistance = Math.max(card.offsetHeight + 140, 450);
-    card.style.transform = kind === 'hard' ? `translate3d(0,${downDistance}px,0) rotate(5deg)` : `translate3d(${kind==='yes'?distance:-distance}px,-24px,0) rotate(${kind==='yes'?16:-16}deg)`;
-  }
-  transitionTimer = setTimeout(() => {
+  let flight = null, animation = null;
+  const finish = () => {
+    if (finishCardTransition !== finish) return;
+    finishCardTransition = null;
+    clearTimeout(transitionTimer);
+    if (animation) { animation.onfinish = null; animation.cancel(); }
+    flight?.remove();
+    card.style.visibility = '';
+    card.closest('.study').classList.remove('is-answering');
+    card.closest('.app').classList.remove('is-answering');
+    answers.forEach(button => button.classList.remove('is-selected'));
     busy = false; render();
     if (refocusCard && state.queue.length) $('front-flip').focus({preventScroll:true});
     else if (refocusAnswer && state.queue.length) refocusAnswer.focus({preventScroll:true});
     if (!state.queue.length) celebrate();
-  },delay);
+  };
+  finishCardTransition = finish;
+  if (!moving() || !card.animate) { finish(); return; }
+
+  // A viewport layer lets the whole card leave the screen without clipping at
+  // the deck, covering the controls with a cut edge, or changing page scroll.
+  const bounds = card.getBoundingClientRect();
+  flight = document.createElement('div');
+  flight.className = 'card-flight';
+  flight.setAttribute('aria-hidden', 'true');
+  flight.inert = true;
+  const departing = card.cloneNode(true);
+  departing.removeAttribute('id');
+  departing.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  Object.assign(departing.style, {
+    left: `${bounds.left}px`, top: `${bounds.top}px`,
+    width: `${bounds.width}px`, height: `${bounds.height}px`, transition: 'none'
+  });
+  flight.append(departing);
+  document.body.append(flight);
+  // A cloned CSS animation starts at zero. Preserve the live border's phase.
+  const edge = card.getAnimations({subtree:true}).find(item => item.animationName === 'edge-shimmer');
+  departing.getAnimations({subtree:true}).filter(item => item.animationName === 'edge-shimmer')
+    .forEach(item => { if (edge) item.currentTime = edge.currentTime; });
+  card.style.visibility = 'hidden';
+  answers.find(button => button.dataset.answer === kind)?.classList.add('is-selected');
+
+  const duration = kind === 'hard' ? 520 : 480;
+  const angle = kind === 'hard' ? 2 : kind === 'yes' ? 6 : -6;
+  const radians = Math.abs(angle) * Math.PI / 180;
+  const halfWidth = (bounds.width * Math.cos(radians) + bounds.height * Math.sin(radians)) / 2;
+  const halfHeight = (bounds.height * Math.cos(radians) + bounds.width * Math.sin(radians)) / 2;
+  const centerX = bounds.left + bounds.width / 2, centerY = bounds.top + bounds.height / 2;
+  const x = kind === 'hard' ? 0 : kind === 'yes'
+    ? document.documentElement.clientWidth - centerX + halfWidth + 100
+    : -centerX - halfWidth - 100;
+  const y = kind === 'hard' ? window.innerHeight - centerY + halfHeight + 100 : -12;
+
+  $('deck').style.setProperty('--exit-duration', `${duration}ms`);
+  void $('queued-card').offsetWidth;
+  $('deck').classList.add('advancing');
+  $('queued-card').style.transform = 'translateY(0) scale(1) rotate(0deg)';
+  animation = departing.animate([
+    {transform: 'translate3d(0,0,0) rotate(0deg)'},
+    {transform: `translate3d(${x}px,${y}px,0) rotate(${angle}deg)`}
+  ], {duration, easing: 'cubic-bezier(.32,0,.67,0)', fill: 'forwards'});
+  animation.onfinish = finish;
+  transitionTimer = setTimeout(finish, duration + 100);
 }
 function undo() {
   if (busy || !previous || libraryOpen) return;

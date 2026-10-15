@@ -16,13 +16,13 @@ const path=require('node:path'),assert=require('node:assert/strict');
    }
    assert.ok(Math.abs(initial.left)<1,name+': left clip edge');
    assert.ok(Math.abs(initial.right-initial.viewport)<1,name+': right clip edge');
-   for(const kind of ['yes','no']){
-    await page.evaluate(kind=>{rate(kind);clearTimeout(transitionTimer);card.style.transition='none';},kind);
-    const end=await page.evaluate(()=>{const r=card.getBoundingClientRect();return {left:r.left,right:r.right,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight};});
-    assert.ok(kind==='yes'?end.left>initial.viewport:end.right<0,name+': complete exit '+kind);
+   for(const kind of ['yes','no','hard']){
+    await page.evaluate(kind=>{rate(kind);clearTimeout(transitionTimer);const a=document.querySelector('.card-flight .card').getAnimations()[0];a.pause();a.currentTime=a.effect.getTiming().duration;},kind);
+    const end=await page.evaluate(()=>{const r=document.querySelector('.card-flight .card').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight};});
+    assert.ok(kind==='hard'?end.top>viewport.height:kind==='yes'?end.left>initial.viewport:end.right<0,name+': complete exit '+kind);
     assert.ok(end.width<=viewport.width,name+': no horizontal overflow');
     assert.equal(end.height,initial.height,name+': stable height');
-    await page.evaluate(()=>{busy=false;render();});
+    await page.evaluate(()=>finishCardTransition());
    }
    const r=await page.locator('#card').boundingBox();
    await page.mouse.move(r.x+r.width/2,r.y+r.height/2);await page.mouse.down();
