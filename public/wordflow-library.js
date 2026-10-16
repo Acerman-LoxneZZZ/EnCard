@@ -75,6 +75,19 @@
     selectionBar.append(selectionToggle, selectionCount, selectionAdd);
     const wordList = document.getElementById('word-list');
     wordList.before(selectionBar);
+    const undoBar = element('div', 'word-delete-undo');
+    undoBar.hidden = true; undoBar.setAttribute('role', 'status');
+    const undoLabel = element('span');
+    const undoDelete = button('Отменить', 'text-action', () => {
+      const pending = lastDeleted;
+      if (!pending || !commit(pending.document)) return;
+      clearDeleteUndo();
+      adapter.notify(`Слово «${pending.en}» восстановлено.`);
+      const word = words().find(item => item.key === pending.key);
+      wordList.querySelector(`[data-word-id="${word?.id}"] .word-row-edit`)?.focus({preventScroll:true});
+    });
+    undoDelete.id = 'undo-delete-word';
+    undoBar.append(undoLabel, undoDelete); wordList.before(undoBar);
 
     const dialog = element('dialog', 'word-panel');
     dialog.id = 'word-panel';
@@ -93,6 +106,7 @@
     document.body.append(dialog);
     let mode = 'overview', selecting = false, selected = new Set();
     let currentWordId = null, trigger = null, savedOverflow = '', previousDialogMode = 'word';
+    let inlineDraft = null, lastDeleted = null;
 
     const words = () => adapter.words();
     const wordById = id => words().find(word => word.id === id);
@@ -119,12 +133,14 @@
       return session?.learned.includes(id) ? 'learned' : session?.difficult.includes(id) ? 'review' : 'new';
     }
     function updateNavigation() {
+      const single = !adapter.snapshot().collections.items.length;
+      library.classList.toggle('is-single-dictionary', single);
       detail.hidden = mode !== 'collection'; overview.hidden = mode !== 'overview';
       library.dataset.libraryMode = mode;
-      title.textContent = mode === 'overview' ? 'Словари' : 'Состав словаря';
-      closeLibrary.setAttribute('aria-label', mode === 'overview' ? 'Вернуться к карточкам' : 'Вернуться к словарям');
+      title.textContent = single ? 'Словарь' : mode === 'overview' ? 'Словари' : 'Состав словаря';
+      closeLibrary.setAttribute('aria-label', single || mode === 'overview' ? 'Вернуться к карточкам' : 'Вернуться к словарям');
       const visibleLabel = closeLibrary.querySelector('span:not(.sr-only)');
-      if (visibleLabel) visibleLabel.textContent = mode === 'overview' ? 'К карточкам' : 'К словарям';
+      if (visibleLabel) visibleLabel.textContent = single || mode === 'overview' ? 'К карточкам' : 'К словарям';
     }
     function renderOverview() {
       const doc = adapter.snapshot();
@@ -160,6 +176,7 @@
       firstCollection.hidden = !!doc.collections.items.length || !!query;
     }
     function updateSelection() {
+      selectionBar.hidden = !adapter.snapshot().collections.items.length;
       selectionToggle.textContent = selecting ? 'Отменить выбор' : 'Выбрать';
       selectionToggle.setAttribute('aria-pressed', String(selecting));
       selectionCount.hidden = !selecting; selectionAdd.hidden = !selecting;
@@ -168,6 +185,7 @@
       wordList.classList.toggle('is-selecting', selecting);
     }
     function decorateRows() {
+      const builtinCount = adapter.snapshot().builtinWords.length;
       for (const row of wordList.querySelectorAll('.word-row[data-word-id]')) {
         const id = Number(row.dataset.wordId), word = wordById(id);
         if (!word) continue;
@@ -179,6 +197,14 @@
           row.append(open);
         }
         open.setAttribute('aria-label', `Открыть слово ${word.en}`);
+        if (word.id >= builtinCount && !row.querySelector('.word-row-actions')) {
+          const actions = element('div', 'word-row-actions');
+          const edit = button('Редактировать', 'word-row-edit', () => openInlineEdit(word.key));
+          edit.setAttribute('aria-label', `Редактировать слово ${word.en}`);
+          const remove = button('Удалить', 'word-row-delete', () => deleteWordNow(word.id));
+          remove.setAttribute('aria-label', `Удалить слово ${word.en}`);
+          actions.append(edit, remove); row.append(actions);
+        }
         // Removal remains available in the focused word panel, reducing competing row actions.
         const oldRemove = row.querySelector('.remove-membership');
         if (oldRemove) oldRemove.hidden = true;
@@ -198,7 +224,73 @@
           select.querySelector('input').checked = selected.has(id);
         }
         row.classList.toggle('is-selected', selecting && selected.has(id));
+        if (inlineDraft?.key === word.key && !row.querySelector('.word-row-editor')) renderInlineEdit(row, word);
       }
+    }
+    function clearDeleteUndo() { lastDeleted = null; undoBar.hidden = true; }
+    window.addEventListener('wordflow:datachange', clearDeleteUndo);
+    function deleteWordNow(id) {
+      const word = wordById(id);
+      if (!word || adapter.isBusy?.()) return false;
+      const before = adapter.snapshot();
+      try {
+        if (!commit(global.WordflowModel.deleteWord(before, id))) return false;
+        selected.clear(); updateSelection(); decorateRows(); closeOverlay();
+        lastDeleted = {document:before,key:word.key,en:word.en};
+        undoLabel.textContent = `Удалено: ${word.en}`; undoBar.hidden = false;
+        if (inlineDraft?.key === word.key) closeInlineEdit();
+        return true;
+      } catch (failure) { adapter.notify(failure.message || 'Не удалось удалить слово.'); return false; }
+    }
+    function closeInlineEdit() {
+      inlineDraft = null;
+      wordList.querySelectorAll('.word-row-editor').forEach(form => form.remove());
+      wordList.querySelectorAll('.is-editing').forEach(row => row.classList.remove('is-editing'));
+    }
+    function openInlineEdit(key) {
+      const word = words().find(item => item.key === key);
+      if (!word || adapter.isBusy?.()) return;
+      closeInlineEdit(); adapter.stopSpeech?.();
+      inlineDraft = {key,en:word.en,ru:word.ru};
+      const row = wordList.querySelector(`[data-word-id="${word.id}"]`);
+      if (row) { renderInlineEdit(row, word); row.querySelector('input').focus({preventScroll:true}); }
+    }
+    function renderInlineEdit(row, word) {
+      row.classList.add('is-editing');
+      const form = element('form', 'word-row-editor');
+      const enLabel = element('label', '', 'Английское слово'), ruLabel = element('label', '', 'Перевод');
+      const en = element('input'), ru = element('input');
+      en.value = inlineDraft.en; en.lang = 'en'; en.maxLength = 80; en.autocomplete = 'off'; en.spellcheck = false; en.required = true;
+      ru.value = inlineDraft.ru; ru.maxLength = 120; ru.required = true;
+      en.name = 'en'; ru.name = 'ru'; enLabel.append(en); ruLabel.append(ru);
+      const warning = element('p', 'word-edit-warning', 'Новое английское написание вернёт это слово на изучение. Прогресс остальных слов сохранится.');
+      const issue = element('p', 'word-row-error'); issue.setAttribute('role', 'alert'); issue.hidden = true;
+      const issueId = `word-row-error-${word.id}`, warningId = `word-row-warning-${word.id}`;
+      issue.id = issueId; warning.id = warningId;
+      en.setAttribute('aria-describedby', `${warningId} ${issueId}`); ru.setAttribute('aria-describedby', issueId);
+      const changed = () => {
+        inlineDraft.en = en.value; inlineDraft.ru = ru.value;
+        warning.hidden = en.value.trim().toLowerCase() === word.en.toLowerCase(); issue.hidden = true;
+      };
+      en.addEventListener('input', changed); ru.addEventListener('input', changed); changed();
+      const actions = element('div', 'word-row-editor-actions');
+      const save = button('Сохранить', 'secondary-action'); save.type = 'submit';
+      const cancel = button('Отмена', 'text-action', () => { closeInlineEdit(); row.querySelector('.word-row-edit')?.focus({preventScroll:true}); });
+      actions.append(save, cancel); form.append(enLabel, ruLabel, warning, issue, actions);
+      form.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); cancel.click(); } });
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        try {
+          const current = words().find(item => item.key === word.key);
+          if (!current) return;
+          const result = global.WordflowModel.editWord(adapter.snapshot(), current.id, {en:en.value.trim().replace(/\s+/g,' '),ru:ru.value.trim().replace(/\s+/g,' ')}, adapter.transcriptionFor);
+          if (!commit(result.document)) { issue.textContent = 'Не удалось сохранить изменения. Попробуйте ещё раз.'; issue.hidden = false; return; }
+          closeInlineEdit(); adapter.notify('Изменения сохранены.');
+          const updated = words().find(item => item.key === word.key);
+          wordList.querySelector(`[data-word-id="${updated?.id}"] .word-row-edit`)?.focus({preventScroll:true});
+        } catch (failure) { issue.textContent = failure.message || 'Проверьте слово и перевод.'; issue.hidden = false; }
+      });
+      row.append(form);
     }
     function refresh() {
       const validIds = new Set(words().map(word => word.id));
@@ -214,6 +306,7 @@
       }
     }
     function openOverview() {
+      if (!adapter.snapshot().collections.items.length) return openCollection('all');
       if (adapter.isBusy?.() && library.hidden) return false;
       closeOverlay(false); selecting = false; selected.clear(); mode = 'overview';
       if (editor) editor.hidden = true;
@@ -255,7 +348,7 @@
     }
     function back() {
       if (closeOverlay()) return true;
-      if (mode === 'collection' && !library.hidden) { openOverview(); return true; }
+      if (mode === 'collection' && !library.hidden && adapter.snapshot().collections.items.length) { openOverview(); return true; }
       return false;
     }
     function openWord(id, source) {
@@ -336,14 +429,7 @@
       adapter.stopSpeech?.(); previousDialogMode = 'delete'; setError(''); dialogTitle.textContent = 'Удалить слово?';
       const text = element('p', 'word-delete-copy', `«${word.en}» исчезнет из общего словаря и всех подборок. Другие слова и история занятий сохранятся.`);
       const actions = element('div', 'word-panel-actions');
-      const remove = button('Удалить слово', 'word-delete-confirm', () => {
-        try {
-          if (commit(global.WordflowModel.deleteWord(adapter.snapshot(), word.id))) {
-            selected.clear(); updateSelection(); decorateRows();
-            closeOverlay(); adapter.notify('Слово удалено из всех словарей.');
-          }
-        } catch (failure) { reportError(failure); }
-      });
+      const remove = button('Удалить слово', 'word-delete-confirm', () => deleteWordNow(word.id));
       remove.id = 'confirm-delete-word';
       const cancel = button('Отмена', 'secondary-action', () => { renderWord(); dialogTitle.focus({preventScroll: true}); });
       actions.append(cancel, remove); dialogContent.replaceChildren(text, actions); cancel.focus();
