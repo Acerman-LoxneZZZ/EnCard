@@ -55,6 +55,7 @@ const base=process.env.APP_URL || 'http://127.0.0.1:4173';
       await page.screenshot({path:'.impeccable/build/telegram-profile-'+width+'.png',fullPage:true});
       await page.locator('#profile-back').click();
       await page.locator('#open-library').click();await page.waitForTimeout(400);
+      await page.locator('.library-collection-row[data-collection-id="all"] .secondary-action').click();
       await page.locator('#custom-en').fill('sunshine');await page.locator('#custom-ru').fill('солнечный свет');
       await page.locator('#add-word-form button[type="submit"]').click();
       database.get(id).revision++;

@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,sign} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
+import '../public/wordflow-model.js';
+import '../public/wordflow-activity.js';
 import {verifyTelegram,MAX_AUTH_AGE} from '../server/telegram.mjs';
 import {validateDocument,BUILTIN_WORDS} from '../server/document.mjs';
 import {handleProfile} from '../server/profile.mjs';
-import {chooseSnapshot,acknowledge,valuesFromDocument,cacheKey} from '../public/profile-sync.js';
+import {chooseSnapshot,acknowledge,valuesFromDocument,valuesMatchDocument,alignPrunedSnapshot,cacheKey,DATA_KEYS} from '../public/profile-sync.js';
 
 const {publicKey,privateKey}=generateKeyPairSync('ed25519');
 const key=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
@@ -20,6 +22,12 @@ const verify=(data,id)=>verifyTelegram(data,id,{now,publicKey:key});
 function document() {return {format:'wordflow-backup',version:1,builtinWords:BUILTIN_WORDS,customWords:[],
   session:{queue:Array.from({length:20},(_,i)=>i),learned:[],difficult:[],hinted:[],attempts:0,streak:0,bestStreak:0},
   collections:{items:[],activeId:'all',sessions:{}},preferences:{effects:true,shortcuts:true}};}
+function documentV2() {
+  const data=document();data.customWords.push({en:'profile word',ru:'слово профиля',ipa:''});data.session.queue.push(20);
+  const migrated=globalThis.WordflowModel.normalizeDocument(data,now);
+  migrated.activity.events=[{id:'answer-profile-test',at:now,date:globalThis.WordflowActivity.localDate(now),wordKey:migrated.customWords[0].key,en:'profile word',ru:'слово профиля',kind:'hard'}];
+  return migrated;
+}
 function database() {
   const sqlite=new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../drizzle/0000_giant_mad_thinker.sql',import.meta.url),'utf8'));
@@ -101,4 +109,80 @@ test('imported values are not acknowledged as an older in-flight document',()=>{
   const boot=chooseSnapshot(cache,{profile:{id:'123'},revision:2,document:old});
   assert.equal(boot.conflict,true);assert.equal(boot.cache.dirty,true);
   assert.equal(JSON.parse(boot.cache.values['wordflow.preferences.v1']).effects,false);
+});
+
+test('v1 reads preserve the original schema and migration keeps numeric progress',()=>{
+  const legacy=document();legacy.session.queue.shift();legacy.session.learned.push(0);legacy.session.attempts=1;legacy.session.streak=1;legacy.session.bestStreak=1;
+  const validated=validateDocument(legacy,now);assert.equal(validated.version,1);
+  const migrated=globalThis.WordflowModel.normalizeDocument(validated,now);
+  assert.equal(migrated.version,2);assert.deepEqual(migrated.session,legacy.session);assert.deepEqual(migrated.activity.events,[]);
+});
+
+test('v2 profile round trip retains identities and activity, isolated from another account',async()=>{
+  const DB=database(),env={DB,TELEGRAM_BOT_ID:botId},data=documentV2();
+  try {
+    assert.equal((await handleProfile(request('PUT',123,{revision:0,document:data}),env,{verify})).status,200);
+    const own=await (await handleProfile(request('GET',123),env,{verify})).json();
+    assert.deepEqual(own.document,data);assert.equal(own.revision,1);
+    const other=await (await handleProfile(request('GET',456),env,{verify})).json();assert.equal(other.document,null);
+    assert.equal(DATA_KEYS[4],'wordflow.activity.v1');
+    assert.deepEqual(JSON.parse(valuesFromDocument(data)[DATA_KEYS[4]]),data.activity);
+  } finally {DB.close();}
+});
+
+test('an old v1 save cannot downgrade a v2 profile or advance its revision',async()=>{
+  const DB=database(),env={DB,TELEGRAM_BOT_ID:botId},data=documentV2();
+  try {
+    assert.equal((await handleProfile(request('PUT',123,{revision:0,document:data}),env,{verify})).status,200);
+    const downgrade=await handleProfile(request('PUT',123,{revision:1,document:document()}),env,{verify});
+    assert.equal(downgrade.status,409);assert.equal((await downgrade.json()).error,'update_required');
+    const own=await (await handleProfile(request('GET'),env,{verify})).json();assert.equal(own.revision,1);assert.deepEqual(own.document,data);
+  } finally {DB.close();}
+});
+
+test('identity and activity-only edits stay dirty through conflicts and old acknowledgements',()=>{
+  const sent=documentV2(),current=structuredClone(sent);current.activity.events=[];
+  assert.equal(valuesMatchDocument(valuesFromDocument(current),sent),false);
+  const cache={profile:{id:'123'},revision:1,dirty:true,document:sent,values:valuesFromDocument(current)};
+  assert.equal(chooseSnapshot(cache,{profile:{id:'123'},revision:2,document:sent}).conflict,true);
+  assert.equal(acknowledge(cache,sent,{revision:2,updatedAt:now},current).dirty,true);
+  const changedKey=structuredClone(sent);changedKey.customWords[0].key='custom:replacement-key';
+  assert.equal(valuesMatchDocument(valuesFromDocument(changedKey),sent),false);
+});
+
+test('deterministic legacy identities do not manufacture a conflict during migration',()=>{
+  const old=document();old.customWords=[{en:'Legacy Phrase',ru:'старая фраза',ipa:''}];old.session.queue.push(20);
+  const migrated=globalThis.WordflowModel.normalizeDocument(old,now);
+  assert.equal(valuesMatchDocument(valuesFromDocument(old),migrated),true);
+  const cache={profile:{id:'123'},revision:1,dirty:true,document:old,values:valuesFromDocument(old)};
+  const chosen=chooseSnapshot(cache,{profile:{id:'123'},revision:2,document:migrated});
+  assert.equal(chosen.conflict,false);
+  assert.equal(chosen.cache.document.version,2,'equal old cache adopts the authoritative migrated cloud document');
+  assert.equal(chosen.cache.document.activity.startedAt,now);
+  assert.deepEqual(chosen.cache.values,valuesFromDocument(migrated));
+  const later=structuredClone(migrated);later.activity.startedAt=now+1;
+  assert.equal(valuesMatchDocument(valuesFromDocument(migrated),later),false,'explicit collection start is part of v2 data');
+});
+
+test('malformed v2 history does not replace a saved profile',async()=>{
+  const DB=database(),env={DB,TELEGRAM_BOT_ID:botId},data=documentV2();
+  try {
+    assert.equal((await handleProfile(request('PUT',123,{revision:0,document:data}),env,{verify})).status,200);
+    const broken=structuredClone(data);broken.activity.events.push({...broken.activity.events[0]});
+    assert.equal((await handleProfile(request('PUT',123,{revision:1,document:broken}),env,{verify})).status,400);
+    const own=await (await handleProfile(request('GET'),env,{verify})).json();assert.equal(own.revision,1);assert.deepEqual(own.document,data);
+  } finally {DB.close();}
+});
+
+test('history expiry aligns persisted values before acknowledgement without replacing a pending import',()=>{
+  const before=documentV2(),later=now+8*86400000;
+  const current=globalThis.WordflowActivity.fitDocument(before,later);
+  assert.equal(current.activity.events.length,0);
+  const cache={revision:1,dirty:true,document:before,values:valuesFromDocument(before)};
+  const aligned=alignPrunedSnapshot(cache,current,later);
+  assert.notEqual(aligned,cache);assert.equal(valuesMatchDocument(aligned.values,current),true);
+  assert.equal(acknowledge(aligned,current,{revision:2,updatedAt:later},current).dirty,false);
+  const imported=documentV2();imported.activity.events[0].kind='yes';
+  const pending={...cache,document:imported,values:valuesFromDocument(imported)};
+  assert.equal(alignPrunedSnapshot(pending,before,now),pending,'a live snapshot from before an import cannot replace the imported history');
 });

@@ -38,3 +38,31 @@
 .profile-status-line { margin:18px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
 @media(max-width:480px) { .header-actions { gap:8px; } .profile-panel { margin-top:20px; } .profile-stats { gap:20px; } }
 @media(prefers-reduced-motion:reduce) { .profile-action,.profile-button { transition:none; } }
+.profile-weekly { margin:0 0 32px; padding-bottom:28px; border-bottom:1px solid #ffffff14; }
+.profile-weekly h2 { margin:0 0 6px; font-size:20px; line-height:1.35; letter-spacing:-.02em; }
+.profile-weekly h3 { margin:28px 0 10px; font-size:15px; line-height:1.5; }
+.profile-weekly [hidden] { display:none; }
+.profile-weekly-period,.profile-history-note { color:var(--muted); font-size:12px; line-height:1.6; margin:0; }
+.profile-weekly-empty { margin:22px 0; color:var(--muted); font-size:14px; line-height:1.6; }
+.profile-week-chart { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; margin:26px 0 22px; }
+.profile-week-day { display:flex; flex-direction:column; align-items:center; gap:9px; min-width:0; }
+.profile-week-amount { color:var(--text); font-size:12px; font-variant-numeric:tabular-nums; }
+.profile-week-track { display:flex; align-items:flex-end; justify-content:center; height:88px; width:100%; border-bottom:1px solid #ffffff1c; }
+.profile-week-bar { display:block; width:clamp(14px,4vw,26px); border-radius:5px 5px 0 0; background:var(--accent); }
+.profile-week-date { color:var(--muted); font-size:12px; line-height:1.4; text-align:center; }
+.profile-week-totals { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0; }
+.profile-week-totals dt { color:var(--muted); font-size:12px; line-height:1.5; }
+.profile-week-totals dd { margin:4px 0 0; color:var(--text); font-size:23px; font-variant-numeric:tabular-nums; }
+.profile-difficult-list { list-style:none; padding:0; margin:0 0 16px; }
+.profile-difficult-list li + li { border-top:1px solid #ffffff0d; }
+.profile-difficult-word { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:58px; gap:16px; padding:10px 0; border:0; border-radius:6px; background:transparent; color:var(--text); text-align:left; font:inherit; }
+button.profile-difficult-word { cursor:pointer; }
+button.profile-difficult-word:hover { background:#c4b6f509; }
+.profile-difficult-word > span:first-child { min-width:0; overflow-wrap:anywhere; }
+.profile-difficult-word strong { font-size:14px; font-weight:600; }
+.profile-difficult-translation { display:block; margin-top:3px; color:var(--muted); font-size:12px; line-height:1.5; }
+.profile-difficult-count { color:var(--amber); font-size:14px; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.profile-history-note { margin-top:18px; }
+.profile-history-limit { color:var(--amber); font-size:12px; line-height:1.6; margin:10px 0 0; }
+.profile-panel button:focus-visible,.profile-panel a:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+@media(max-width:380px) { .profile-week-chart { gap:4px; } .profile-week-date { max-width:32px; } }

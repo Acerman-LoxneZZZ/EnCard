@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export function GET() {
   // Preserve the established HTML app; initialize it after selecting the
   // authenticated user's cache. The shell contains no personal server data.
-  const html=source.replace(/<script>([\s\S]*?)<\/script>/g, (_match,script:string)=>
+  const html=source.replaceAll('./public/', '/').replace(/<script>([\s\S]*?)<\/script>/g, (_match,script:string)=>
     `<script type="text/wordflow-script">${script.replace(/\blocalStorage\b/g,'window.WordflowStorage')}</script>`)
     .replace('</head>', '<link rel="stylesheet" href="/profile.css"></head>')
     .replace('<body>', '<body class="profile-loading">')

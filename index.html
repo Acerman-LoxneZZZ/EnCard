@@ -651,7 +651,7 @@ html.in-telegram body { min-height: var(--tg-viewport-stable-height, 100svh); }
 .backup-tools .collection-buttons { flex-wrap: wrap; }
 .backup-preview { margin-top: 16px; }
 .backup-tools button { min-height: 44px; }
-</style></head><body>
+</style><link rel="stylesheet" href="./public/wordflow-library.css"><script src="./public/wordflow-model.js"></script><script src="./public/wordflow-activity.js"></script><script src="./public/wordflow-library.js"></script></head><body>
 <div class="ambient" aria-hidden="true"><canvas id="light-grid"></canvas></div>
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
 <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -896,14 +896,10 @@ function writeCollections(items = collections, sessions = collectionSessions, ac
     sessions: Object.fromEntries(items.map(item => [item.id, sessions[item.id]]))}));
 }
 function commitCollections(next) {
-  collectionSessions[activeCollectionId] = state;
-  const sessions = Object.create(null);
-  sessions.all = collectionSessions.all;
-  next.forEach(item => sessions[item.id] = reconcileSession(collectionSessions[item.id], item.wordIds));
-  try { writeCollections(next, sessions); }
-  catch { toast('Не удалось сохранить словарь. Изменения не применены.'); return false; }
-  collections = next; collectionSessions = sessions; state = sessions[activeCollectionId]; previous = null;
-  render(); return true;
+  const nextDocument = documentSnapshot();
+  nextDocument.collections.items = next;
+  nextDocument.collections.sessions = Object.fromEntries(next.map(item => [item.id,reconcileSession(collectionSessions[item.id],item.wordIds)]));
+  return commitDocument(nextDocument);
 }
 function selectCollection(id) {
   if (id !== 'all' && !collections.some(item => item.id === id)) return;
@@ -931,7 +927,7 @@ function submitCollection(event) {
   const id = editingCollectionId || `deck-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const next = editingCollectionId ? collections.map(item => item.id === id ? {...item, name} : item) : [...collections, {id, name, wordIds: []}];
   if (!commitCollections(next)) return;
-  selectCollection(id); $('collection-select').focus();
+  selectCollection(id); libraryController?.openCollection(id); $('collection-select').focus();
   toast(editingCollectionId ? 'Название сохранено.' : `Словарь «${name}» создан.`);
 }
 function attachWords(ids) {
@@ -993,13 +989,14 @@ function studyCollection(id = browsingCollectionId, restartCompleted = true) {
   if (busy || navigationPending || !collectionWordIds(id).length) return;
   stopSpeech();
   navigateScreen(() => {
-    save(); activeCollectionId = id; browsingCollectionId = id;
-    state = collectionSessions[activeCollectionId];
-    if (!state.queue.length && restartCompleted) state = fresh();
-    previous = null; libraryOpen = false; save(); render();
-    $(state.queue.length ? 'front-flip' : 'finish-title').focus({preventScroll: true});
-    window.scrollTo({top: 0, behavior: 'instant'});
-  }, -1);
+    const next=documentSnapshot();next.collections.activeId=id;
+    const selected=id==='all'?next.session:next.collections.sessions[id];
+    if(!selected.queue.length&&restartCompleted){if(id==='all')next.session=fresh(collectionWordIds(id));else next.collections.sessions[id]=fresh(collectionWordIds(id));}
+    if(!commitDocument(next))return;
+    browsingCollectionId=id;libraryOpen=false;render();
+    $(state.queue.length?'front-flip':'finish-title').focus({preventScroll:true});
+    window.scrollTo({top:0,behavior:'instant'});
+  },-1);
 }
 function initCollections() {
   collectionSessions.all = state;
@@ -1174,25 +1171,37 @@ const STORAGE_KEY = 'wordflow.session.v1';
 const PREFS_KEY = 'wordflow.preferences.v1';
 const CUSTOM_KEY = 'wordflow.custom-words.v1';
 const COLLECTIONS_KEY = 'wordflow.collections.v1';
+const ACTIVITY_KEY = 'wordflow.activity.v1';
+const Model = window.WordflowModel, Activity = window.WordflowActivity;
+let libraryController = null, overlayOpen = false, previousEventId = null;
+let activity, activityRecoveryWarning = false, activityRecoveryFailed = false;
+try {
+  const stored = localStorage.getItem(ACTIVITY_KEY);
+  activity = stored ? Model.validateActivity(JSON.parse(stored),Date.now()) : Activity.emptyActivity(Date.now());
+} catch {
+  activityRecoveryWarning = true;
+  try {localStorage.setItem('wordflow.activity.recovery.v1',localStorage.getItem(ACTIVITY_KEY) || '');}
+  catch {activityRecoveryFailed = true;}
+  activity = Activity.emptyActivity(Date.now());
+}
 let collections = [], collectionSessions = Object.create(null), activeCollectionId = 'all', browsingCollectionId = 'all', editingCollectionId = null;
 const pickerSelection = new Set();
 const BUILTIN_COUNT = WORDS.length;
+WORDS.forEach(word => word.key = 'builtin:' + word.en);
 try {
   const custom = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
-  let repairedTranscriptions = false;
   if (Array.isArray(custom)) custom.slice(0, 500).forEach(item => {
     if (item && typeof item.en === 'string' && typeof item.ru === 'string' &&
         item.en.length <= 80 && item.ru.length <= 120 && item.en.trim() && item.ru.trim()) {
       const savedIpa = typeof item.ipa === 'string' ? item.ipa.trim() : '';
       const ipa = savedIpa || transcriptionFor(item.en);
-      if (ipa && !savedIpa) repairedTranscriptions = true;
-      WORDS.push({ id: WORDS.length, en: item.en.trim(), ru: item.ru.trim(), ipa,
+      WORDS.push({ id: WORDS.length, key: item.key || 'legacy:' + encodeURIComponent(item.en.trim().toLowerCase()), en: item.en.trim(), ru: item.ru.trim(), ipa,
         audioUrl: typeof item.audioUrl === 'string' ? item.audioUrl : '',
         audioCredit: typeof item.audioCredit === 'string' ? item.audioCredit : '',
         audioSource: typeof item.audioSource === 'string' ? item.audioSource : '' });
     }
   });
-  if (repairedTranscriptions) saveCustomWords();
+  // Persist repaired IPA together with the first complete, recoverable save.
 } catch { /* Встроенная колода работает и без локального хранилища. */ }
 const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 const precisePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
@@ -1235,17 +1244,67 @@ try {
   if (preferences && typeof preferences.shortcuts === 'boolean') shortcutsEnabled = preferences.shortcuts;
 } catch { storageAvailable = false; }
 
-function save() {
+function documentSnapshot() {
   collectionSessions[activeCollectionId] = state;
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collectionSessions.all)); writeCollections(); storageAvailable = true; }
-  catch { storageAvailable = false; }
-  $('save-note').textContent = storageAvailable ? 'Прогресс сохранён' : 'Сохранено только в этой вкладке';
-  $('save-note').parentElement.hidden = storageAvailable;
+  return Activity.fitDocument({format:'wordflow-backup',version:2,
+    builtinWords:WORDS.slice(0,BUILTIN_COUNT).map(word => word.en),
+    customWords:WORDS.slice(BUILTIN_COUNT).map(({key,en,ru,ipa}) => ({key,en,ru,ipa})),
+    session:collectionSessions.all,
+    collections:{items:collections,activeId:activeCollectionId,sessions:Object.fromEntries(collections.map(item => [item.id,collectionSessions[item.id]]))},
+    preferences:{effects:effectsEnabled,shortcuts:shortcutsEnabled},activity
+  },Date.now(),previousEventId);
 }
-function savePreferences() {
-  try {localStorage.setItem(PREFS_KEY,JSON.stringify({effects:effectsEnabled,shortcuts:shortcutsEnabled}));}
-  catch { /* Настройки остаются активными для текущей вкладки. */ }
+function persistValues(values,apply = () => {}) {
+  if(activityRecoveryFailed)throw new Error('Не удалось сохранить прежнюю историю. Освободите память устройства.');
+  const storage = window.WordflowStorage || localStorage;
+  if (storage.transaction) {if(!storage.transaction(values,apply))throw new Error('Не удалось сохранить изменения. Проверьте память устройства.');}
+  else {
+    if(!storage.getItem(ACTIVITY_KEY)&&!storage.getItem('wordflow.migration.previous.v1')) {
+      const old=Object.fromEntries(Model.DATA_KEYS.map(key=>[key,storage.getItem(key)]));
+      storage.setItem('wordflow.migration.previous.v1',JSON.stringify({format:'wordflow-storage-recovery',version:1,values:old}));
+    }
+    Model.commitValues(storage,values,apply);
+  }
 }
+function applyDocument(next) {
+  const recordings = new Map(WORDS.map(word => [word.key,word]));
+  const custom = next.customWords.map((word,index) => {
+    const old = recordings.get(word.key);
+    const audio = old?.en.toLowerCase() === word.en.toLowerCase() ? {audioUrl:old.audioUrl,audioCredit:old.audioCredit,audioSource:old.audioSource} : {};
+    return {...word,...audio,id:BUILTIN_COUNT+index};
+  });
+  WORDS.splice(BUILTIN_COUNT,WORDS.length-BUILTIN_COUNT,...custom);
+  collections = next.collections.items;
+  collectionSessions = Object.assign(Object.create(null),{all:next.session},next.collections.sessions);
+  activeCollectionId = next.collections.activeId;
+  if (browsingCollectionId !== 'all' && !collections.some(item => item.id===browsingCollectionId)) browsingCollectionId='all';
+  state=collectionSessions[activeCollectionId];activity=next.activity;
+  effectsEnabled=next.preferences.effects;shortcutsEnabled=next.preferences.shortcuts;
+  pickerSelection.clear();previous=null;previousEventId=null;
+}
+function commitDocument(next) {
+  if (busy || navigationPending) return false;
+  try {
+    const nextDocument = Model.normalizeDocument(Activity.fitDocument(next,Date.now()),Date.now());
+    persistValues(Model.valuesFromDocument(nextDocument),() => applyDocument(nextDocument));
+    storageAvailable=true;stopSpeech();render();if(libraryOpen)renderLibrary();
+    window.dispatchEvent(new Event('wordflow:datachange'));return true;
+  } catch(error) {
+    storageAvailable=false;
+    toast(error.code==='too_large'?'Словари слишком большие. Сохраните копию и уменьшите их размер.':error.code==='rollback_failed'?'Сохранение прервано. Предыдущая копия осталась на устройстве. Освободите память и перезапустите приложение.':'Не удалось сохранить изменения. Проверьте память устройства и попробуйте снова.');return false;
+  }
+}
+function save() {
+  collectionSessions[activeCollectionId]=state;
+  try {const nextDocument=documentSnapshot();persistValues(Model.valuesFromDocument(nextDocument));activity=nextDocument.activity;storageAvailable=true;}
+  catch {storageAvailable=false;}
+  $('save-note').textContent=storageAvailable?'Прогресс сохранён':'Сохранено только в этой вкладке. Сохраните копию перед выходом.';
+  $('save-note').parentElement.hidden=storageAvailable;
+  if(storageAvailable)window.dispatchEvent(new Event('wordflow:datachange'));
+  return storageAvailable;
+}
+function savePreferences() {save();}
+
 function toast(message) {
   $('toast').textContent = message;
   $('toast').classList.add('visible');
@@ -1402,8 +1461,8 @@ function render(initial = false) {
   void lookupRecording(word);
 }
 function saveCustomWords() {
-  const entries = WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) =>
-    ({en,ru,ipa,audioUrl,audioCredit,audioSource}));
+  const entries = WORDS.slice(BUILTIN_COUNT).map(({key,en,ru,ipa,audioUrl,audioCredit,audioSource}) =>
+    ({key,en,ru,ipa,audioUrl,audioCredit,audioSource}));
   localStorage.setItem(CUSTOM_KEY, JSON.stringify(entries));
 }
 async function fetchJson(url) {
@@ -1417,39 +1476,39 @@ async function fetchJson(url) {
 }
 const audioLookups = new Map();
 async function lookupRecording(word) {
-  if (word.audioUrl || !('fetch' in window) || !/^[a-z][a-z '\-]*$/i.test(word.en)) return word.audioUrl || '';
-  const key = word.en.toLowerCase();
-  if (audioLookups.has(key)) return audioLookups.get(key);
-  const pending = (async () => {
-    const name = word.en.toLowerCase().replace(/ /g, '_');
-    const titles = ['En-us-', 'En-uk-', 'En-au-', 'En-'].map(prefix => `File:${prefix}${name}.ogg`);
-    const params = new URLSearchParams({action:'query',titles:titles.join('|'),prop:'imageinfo',iiprop:'url|extmetadata',format:'json',origin:'*'});
-    try {
-      const data = await fetchJson(`https://commons.wikimedia.org/w/api.php?${params}`);
-      const pages = Object.values(data.query?.pages || {});
-      const page = titles.map(title => pages.find(item => item.title.toLowerCase() === title.toLowerCase() && item.imageinfo?.[0]?.url)).find(Boolean);
-      if (!page) return '';
-      const info = page.imageinfo[0];
-      if (!/^https:\/\/upload\.wikimedia\.org\//.test(info.url)) return '';
-      const meta = info.extmetadata || {};
-      const artist = (meta.Artist?.value || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
-      const license = (meta.LicenseShortName?.value || '').trim();
-      word.audioUrl = info.url;
-      word.audioSource = info.descriptionurl || '';
-      word.audioCredit = [artist, license].filter(Boolean).join(' · ').slice(0, 120);
-      if (word.id >= BUILTIN_COUNT) try { saveCustomWords(); } catch { /* В памяти запись работает. */ }
-      return word.audioUrl;
-    } catch { return ''; }
-  })();
-  audioLookups.set(key, pending);
-  return pending;
+  if(word.audioUrl||!('fetch' in window)||!/^[a-z][a-z '\-]*$/i.test(word.en))return word.audioUrl||'';
+  const key=word.en.toLowerCase(),wordKey=word.key;
+  if(!audioLookups.has(key)) {
+    const pending=(async()=>{
+      const name=key.replace(/ /g,'_');
+      const titles=['En-us-','En-uk-','En-au-','En-'].map(prefix=>'File:'+prefix+name+'.ogg');
+      const params=new URLSearchParams({action:'query',titles:titles.join('|'),prop:'imageinfo',iiprop:'url|extmetadata',format:'json',origin:'*'});
+      try {
+        const data=await fetchJson('https://commons.wikimedia.org/w/api.php?'+params);
+        const pages=Object.values(data.query?.pages||{});
+        const page=titles.map(title=>pages.find(item=>item.title.toLowerCase()===title.toLowerCase()&&item.imageinfo?.[0]?.url)).find(Boolean);
+        if(!page)return null;
+        const info=page.imageinfo[0];if(!/^https:\/\/upload\.wikimedia\.org\//.test(info.url))return null;
+        const meta=info.extmetadata||{},artist=(meta.Artist?.value||'').replace(/<[^>]*>/g,'').replace(/&[^;]+;/g,' ').trim();
+        return {audioUrl:info.url,audioSource:info.descriptionurl||'',audioCredit:[artist,(meta.LicenseShortName?.value||'').trim()].filter(Boolean).join(' · ').slice(0,120)};
+      } catch {return null;}
+    })();
+    audioLookups.set(key,pending);
+  }
+  const recording=await audioLookups.get(key);
+  // A commit can replace or remove the captured object while the request runs.
+  const current=WORDS.find(item=>item.key===wordKey&&item.en.toLowerCase()===key);
+  if(!recording||!current)return '';
+  Object.assign(current,recording);
+  if(current.id>=BUILTIN_COUNT)try{saveCustomWords();}catch{/* The recording stays usable in this tab. */}
+  return current.audioUrl;
 }
 function stopSpeech() {
   speechToken++; clearTimeout(speechWatchdog);
   if (activeAudio) { activeAudio.pause(); activeAudio.removeAttribute('src'); activeAudio.load(); activeAudio = null; }
   activeUtterance = null;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  document.querySelectorAll('.sound').forEach(b => {b.classList.remove('speaking');b.removeAttribute('aria-busy');});
+  document.querySelectorAll('.sound, #panel-speak-word').forEach(b => {b.classList.remove('speaking');b.removeAttribute('aria-busy');});
 }
 function speakWithBrowser(word, button, token) {
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
@@ -1471,10 +1530,10 @@ function speakWithBrowser(word, button, token) {
     if (speechSynthesis.paused) speechSynthesis.resume();
   } catch { clean(); toast('Браузер не смог запустить озвучку.'); }
 }
-function speak(button) {
-  if (busy || !state.queue.length || libraryOpen || !flipped || button.hidden) return;
+function speak(button, wordOverride = null) {
+  if (busy || button.hidden || (!wordOverride && (!state.queue.length || libraryOpen || overlayOpen || !flipped))) return;
   stopSpeech();
-  const word = WORDS[state.queue[0]], token = speechToken;
+  const word = wordOverride || WORDS[state.queue[0]], token = speechToken;
   button.classList.add('speaking'); button.setAttribute('aria-busy','true');
   // Start within the tap event: never wait for a network lookup to unlock sound.
   if (!word.audioUrl || !('Audio' in window)) {
@@ -1531,18 +1590,21 @@ function celebrate() {
 }
 // Очередь изменяется атомарно до анимации: быстрые двойные клики не теряют слова.
 function rate(kind) {
-  if (busy || navigationPending || dictionaryTrigger || libraryOpen || !state.queue.length || !['yes','no','hard'].includes(kind)) return;
+  if (busy || overlayOpen || navigationPending || dictionaryTrigger || libraryOpen || window.WordflowProfile?.isOpen() || !state.queue.length || !['yes','no','hard'].includes(kind)) return;
   const refocusCard = card.contains(document.activeElement);
   const refocusAnswer = answers.includes(document.activeElement) ? document.activeElement : null;
   busy = true; cardTap = null;
   setFlipped(flipped, false, false);
   card.getAnimations?.().forEach(animation => animation.cancel());
   resetTilt(); stopSpeech();
+  const previousUndo = previous, previousUndoEvent = previousEventId, previousActivity = activity;
   previous = JSON.parse(JSON.stringify(state));
   card.closest('.study').classList.add('is-answering');
   card.closest('.app').classList.add('is-answering');
   updateControls(); tint(kind,1);
   const id = state.queue.shift(); state.attempts++;
+  const at = Date.now(), word = WORDS[id]; previousEventId = crypto.randomUUID();
+  activity = Activity.recordAnswer(activity,{id:previousEventId,at,date:Activity.localDate(at),wordKey:word.key,en:word.en,ru:word.ru,kind},at);
   if (kind === 'yes') {
     state.learned.push(id); state.streak++; state.bestStreak = Math.max(state.bestStreak,state.streak);
     state.hinted = state.hinted.filter(wordId => wordId !== id);
@@ -1555,7 +1617,14 @@ function rate(kind) {
     }
     else state.queue.push(id);
   }
-  save();
+  if(!save()) {
+    state=previous;collectionSessions[activeCollectionId]=state;
+    previous=previousUndo;previousEventId=previousUndoEvent;activity=previousActivity;busy=false;
+    card.closest('.study').classList.remove('is-answering');card.closest('.app').classList.remove('is-answering');
+    render();$('save-note').textContent='Ответ не сохранён. Освободите память устройства.';
+    toast('Ответ не сохранён. Проверьте память устройства и попробуйте снова.');
+    window.dispatchEvent(new Event('wordflow:datachange'));return;
+  }
   // Под уходящей карточкой уже находится следующее слово, а не пустая подложка.
   queuePreview(state.queue[0]);
   let flight = null, animation = null;
@@ -1623,15 +1692,26 @@ function rate(kind) {
   transitionTimer = setTimeout(finish, duration + 100);
 }
 function undo() {
-  if (busy || !previous || libraryOpen) return;
+  if (busy || overlayOpen || !previous || libraryOpen) return;
   stopSpeech(); $('celebration').replaceChildren();
-  state = previous; previous = null; save(); render();
+  const current=state, priorActivity=activity, priorEventId=previousEventId, undoState=previous;
+  state=undoState;previous=null;
+  activity=Activity.removeAnswer(activity,previousEventId,Date.now());previousEventId=null;
+  if(!save()) {
+    state=current;collectionSessions[activeCollectionId]=state;activity=priorActivity;previousEventId=priorEventId;previous=undoState;
+    render();toast('Не удалось отменить ответ. Освободите память устройства и попробуйте снова.');
+    window.dispatchEvent(new Event('wordflow:datachange'));return;
+  }
+  render();
   $('front-flip').focus({preventScroll:true}); toast('Последний ответ отменён.');
 }
 function restart() {
   if (busy) return;
   stopSpeech(); $('celebration').replaceChildren();
-  state = fresh(); previous = null; save(); render();
+  const current=state,priorUndo=previous,priorEventId=previousEventId;
+  state=fresh();previous=null;previousEventId=null;
+  if(!save()){state=current;collectionSessions[activeCollectionId]=state;previous=priorUndo;previousEventId=priorEventId;toast('Не удалось начать заново. Проверьте память устройства.');}
+  render();
   $('front-flip').focus({preventScroll:true});
 }
 
@@ -1647,7 +1727,7 @@ function renderLibrary() {
   $('filter-all-count').textContent = ids.length;
   $('filter-review-count').textContent = session.queue.filter(id => session.difficult.includes(id)).length;
   $('word-list').replaceChildren(...results.map(word => {
-    const li = document.createElement('li'); li.className = 'word-row';
+    const li = document.createElement('li'); li.className = 'word-row'; li.dataset.wordId = String(word.id);
     const name = document.createElement('div'), strong = document.createElement('strong'), ipa = document.createElement('small');
     strong.lang = 'en'; strong.textContent = word.en; ipa.textContent = word.ipa; name.append(strong,ipa);
     const translation = document.createElement('span'); translation.className = 'row-translation'; translation.textContent = word.ru;
@@ -1664,37 +1744,27 @@ function renderLibrary() {
   $('library-empty').hidden = !!results.length;
   $('library-empty').textContent = ids.length ? 'Таких слов нет. Попробуйте другой запрос или фильтр.' : 'Словарь пока пуст. Добавьте новое слово или выберите слова из общего.';
   $('library-count').textContent = `Показано ${results.length} из ${ids.length}`;
+  libraryController?.refresh();
 }
 function addWord(event) {
   event.preventDefault();
-  const en = $('custom-en').value.trim().replace(/\s+/g, ' ');
-  const ru = $('custom-ru').value.trim().replace(/\s+/g, ' ');
-  if (!en || !ru || en.length > 80 || ru.length > 120) return;
-  const existing = WORDS.find(word => word.en.toLocaleLowerCase('en') === en.toLocaleLowerCase('en'));
-  if (existing) {
-    if (browsingCollectionId !== 'all' && !collectionWordIds(browsingCollectionId).includes(existing.id)) {
-      if (attachWords([existing.id])) { renderLibrary(); $('add-word-form').reset(); toast('Существующее слово добавлено в этот словарь.'); }
-    } else toast('Такое английское слово уже есть в словаре.');
-    return;
+  const en=$('custom-en').value.trim().replace(/\s+/g,' '),ru=$('custom-ru').value.trim().replace(/\s+/g,' ');
+  if(!en||!ru||en.length>80||ru.length>120)return;
+  const existing=WORDS.find(word=>word.en.toLowerCase()===en.toLowerCase());
+  if(existing){
+    if(browsingCollectionId!=='all'&&!collectionWordIds(browsingCollectionId).includes(existing.id)){
+      if(attachWords([existing.id])){renderLibrary();$('add-word-form').reset();toast('Существующее слово добавлено в этот словарь.');}
+    }else toast('Такое английское слово уже есть в словаре.');return;
   }
-  if (WORDS.length - BUILTIN_COUNT >= 500) { toast('Можно сохранить до 500 собственных слов.'); return; }
-  const word = {id: WORDS.length, en, ru, ipa: transcriptionFor(en), audioUrl: '', audioCredit: '', audioSource: ''};
-  try {
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify([...WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) => ({en,ru,ipa,audioUrl,audioCredit,audioSource})), {en,ru,ipa:word.ipa}]));
-  } catch {
-    toast('Не удалось сохранить слово. Проверьте доступ к хранилищу браузера.'); return;
+  if(WORDS.length-BUILTIN_COUNT>=500){toast('Можно сохранить до 500 собственных слов.');return;}
+  const next=documentSnapshot(),id=WORDS.length;
+  next.customWords.push({key:Model.createWordKey(),en,ru,ipa:transcriptionFor(en)});next.session.queue.push(id);
+  if(browsingCollectionId!=='all'){
+    next.collections.items.find(item=>item.id===browsingCollectionId).wordIds.push(id);
+    next.collections.sessions[browsingCollectionId].queue.push(id);
   }
-  WORDS.push(word);
-  collectionSessions[activeCollectionId] = state;
-  collectionSessions.all.queue.push(word.id);
-  const targetCollection = browsingCollectionId;
-  const attached = targetCollection === 'all' || attachWords([word.id]);
-  previous = null;
-  save(); render(); renderLibrary();
-  $('add-word-form').reset();
-  $('custom-en').focus();
-  toast(attached ? `Добавлено: ${en}.` : `«${en}» сохранено только в общем словаре. Не удалось сохранить подборку.`);
-  void lookupRecording(word);
+  if(!commitDocument(next))return;
+  $('add-word-form').reset();$('custom-en').focus();toast('Добавлено: '+en+'.');void lookupRecording(WORDS[id]);
 }
 // Parse the whole list before writing anything, retaining original line numbers.
 function parseWordList(text) {
@@ -1753,56 +1823,25 @@ function showBulkError(message) {
 }
 function addWordList(event) {
   event.preventDefault();
-  const {entries, errors} = parseWordList($('bulk-words').value);
-  if (errors.length) { showBulkError(errors.slice(0,3).join('\n') + (errors.length > 3 ? `\nДругих ошибок: ${errors.length - 3}.` : '')); return; }
-  const known = new Map(WORDS.map(word => [word.en.toLocaleLowerCase('en'), word.id]));
-  const newWords = [], ids = new Set();
-  entries.forEach(({en,ru}) => {
-    const key = en.toLocaleLowerCase('en');
-    if (!known.has(key)) {
-      const id = WORDS.length + newWords.length;
-      known.set(key, id);
-      newWords.push({id,en,ru,ipa:transcriptionFor(en),audioUrl:'',audioCredit:'',audioSource:''});
-    }
-    ids.add(known.get(key));
+  const {entries,errors}=parseWordList($('bulk-words').value);
+  if(errors.length){showBulkError(errors.slice(0,3).join('\n')+(errors.length>3?'\nДругих ошибок: '+(errors.length-3)+'.':''));return;}
+  const next=documentSnapshot(),known=new Map(WORDS.map(word=>[word.en.toLowerCase(),word.id])),ids=new Set();
+  entries.forEach(({en,ru})=>{
+    const spelling=en.toLowerCase();
+    if(!known.has(spelling)){const id=BUILTIN_COUNT+next.customWords.length;known.set(spelling,id);next.customWords.push({key:Model.createWordKey(),en,ru,ipa:transcriptionFor(en)});next.session.queue.push(id);}
+    ids.add(known.get(spelling));
   });
-  if (WORDS.length - BUILTIN_COUNT + newWords.length > 500) {
-    showBulkError(`Можно сохранить до 500 собственных слов. Свободных мест: ${500 - WORDS.length + BUILTIN_COUNT}. Уменьшите список.`); return;
+  if(next.customWords.length>500){showBulkError('Можно сохранить до 500 собственных слов. Свободных мест: '+(500-WORDS.length+BUILTIN_COUNT)+'. Уменьшите список.');return;}
+  const members=collectionWordIds(browsingCollectionId),added=[...ids].filter(id=>!members.includes(id)).length;
+  if(!added){$('word-entry-result').textContent='Все слова уже есть в этом словаре.';$('word-entry-result').hidden=false;return;}
+  if(browsingCollectionId!=='all'){
+    const selected=next.collections.items.find(item=>item.id===browsingCollectionId);
+    selected.wordIds=[...new Set([...selected.wordIds,...ids])];
+    next.collections.sessions[browsingCollectionId]=reconcileSession(next.collections.sessions[browsingCollectionId],selected.wordIds);
   }
-  const members = collectionWordIds(browsingCollectionId);
-  const added = [...ids].filter(id => !members.includes(id)).length;
-  if (!added) {
-    $('word-entry-result').textContent = 'Все слова уже есть в этом словаре.';
-    $('word-entry-result').hidden = false; return;
-  }
-  const nextCollections = collections.map(item => item.id === browsingCollectionId
-    ? {...item,wordIds:[...new Set([...item.wordIds,...ids])]} : item);
-  const sessions = {...collectionSessions,[activeCollectionId]:state};
-  sessions.all = reconcileSession(sessions.all, [...WORDS,...newWords].map(word => word.id));
-  if (browsingCollectionId !== 'all') {
-    const selected = nextCollections.find(item => item.id === browsingCollectionId);
-    sessions[browsingCollectionId] = reconcileSession(sessions[browsingCollectionId],selected.wordIds);
-  }
-  const changes = {
-    [CUSTOM_KEY]:JSON.stringify([...WORDS.slice(BUILTIN_COUNT),...newWords].map(({en,ru,ipa,audioUrl,audioCredit,audioSource}) => ({en,ru,ipa,audioUrl,audioCredit,audioSource}))),
-    [STORAGE_KEY]:JSON.stringify(sessions.all),
-    [COLLECTIONS_KEY]:JSON.stringify({items:nextCollections,activeId:activeCollectionId,sessions:Object.fromEntries(nextCollections.map(item => [item.id,sessions[item.id]]))})
-  };
-  const old = Object.create(null), written = [];
-  try {
-    Object.keys(changes).forEach(key => { old[key] = localStorage.getItem(key); });
-    Object.entries(changes).forEach(([key,value]) => { localStorage.setItem(key,value); written.push(key); });
-  } catch {
-    written.forEach(key => { try { old[key] === null ? localStorage.removeItem(key) : localStorage.setItem(key,old[key]); } catch {} });
-    showBulkError('Не удалось сохранить список. Проверьте память устройства и попробуйте ещё раз. Текст остался в форме.'); return;
-  }
-  WORDS.push(...newWords); collections = nextCollections; collectionSessions = sessions;
-  state = sessions[activeCollectionId]; previous = null; storageAvailable = true;
-  render(); renderLibrary();
-  $('bulk-word-form').reset(); updateBulkDraft();
-  const skipped = entries.length - added;
-  $('word-entry-result').textContent = `Добавлено в словарь: ${added}.` + (skipped ? ` Уже были или повторялись: ${skipped}.` : '');
-  $('word-entry-result').hidden = false;
+  if(!commitDocument(next)){showBulkError('Не удалось сохранить список. Проверьте память устройства. Текст остался в форме.');return;}
+  $('bulk-word-form').reset();updateBulkDraft();const skipped=entries.length-added;
+  $('word-entry-result').textContent='Добавлено в словарь: '+added+'.'+(skipped?' Уже были или повторялись: '+skipped+'.':'');$('word-entry-result').hidden=false;
 }
 function toggleLibrary(open, collectionId = activeCollectionId) {
   if (busy || navigationPending || libraryOpen === open) return;
@@ -1810,10 +1849,17 @@ function toggleLibrary(open, collectionId = activeCollectionId) {
   stopSpeech(); resetTilt();
   navigateScreen(() => {
     libraryOpen = open; showCurrentScreen(); updateControls();
-    if (open) { setFlipped(false, false, false); selectCollection(collectionId); setHelp(false,false); renderLibrary(); $('library-title').focus({preventScroll:true}); }
+    if (open) { setFlipped(false, false, false); selectCollection(collectionId); setHelp(false,false); renderLibrary(); libraryController?.openOverview(); $('library-title').focus({preventScroll:true}); }
     else $('open-library').focus({preventScroll:true});
     window.scrollTo({top:0,behavior:'instant'});
   }, open ? 1 : -1);
+}
+function handleBack() {
+  if (libraryController?.closeOverlay()) return true;
+  if (window.WordflowProfile?.handleBack()) return true;
+  if (!$('help').hidden) {setHelp(false);return true;}
+  if (libraryOpen) {if(libraryController?.back())return true;toggleLibrary(false);return true;}
+  return false;
 }
 function setHelp(open,focus = true) {
   $('help').hidden = !open;
@@ -1869,7 +1915,7 @@ $('word-sound').addEventListener('click', event => {
   if (event.detail === 0 || performance.now() >= suppressSoundClickUntil) speak(event.currentTarget);
 });
 $('open-library').addEventListener('click', () => toggleLibrary(!libraryOpen));
-$('close-library').addEventListener('click', () => toggleLibrary(false));
+$('close-library').addEventListener('click', () => handleBack());
 $('word-search').addEventListener('input',renderLibrary);
 document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => {
   filter = button.dataset.filter;
@@ -1957,9 +2003,9 @@ window.addEventListener('pointerup',event=>endCardTap(event));
 window.addEventListener('pointercancel',event=>endCardTap(event,true));
 window.addEventListener('blur',()=>{if(cardTap)endCardTap({pointerId:cardTap.id},true);resetTilt();});
 window.addEventListener('keydown',event=>{
-  if (navigationPending || dictionaryTrigger) return;
+  if (overlayOpen || navigationPending || dictionaryTrigger) return;
   if (event.altKey || event.ctrlKey || event.metaKey || event.repeat || busy) return;
-  if (event.key==='Escape') { if (!$('help').hidden) setHelp(false); else if(libraryOpen)toggleLibrary(false); return; }
+  if (event.key==='Escape') { handleBack(); return; }
   if (!shortcutsEnabled) return;
   if (libraryOpen || !$('help').hidden || event.target.matches('input,textarea,select') || event.target.isContentEditable) return;
   if (event.code==='KeyZ') {event.preventDefault();undo();return;}
@@ -1974,6 +2020,7 @@ window.addEventListener('pagehide',stopSpeech);
 initCollections();
 document.body.classList.toggle('page-hidden',document.hidden);
 applyEffects(); save(); render(true);
+if(activityRecoveryWarning)toast(activityRecoveryFailed?'Не удалось сохранить прежнюю историю. Освободите память устройства.':'История была повреждена. Прежняя копия сохранена на устройстве; сбор начат заново.');
 
 </script>
 
@@ -2005,11 +2052,10 @@ applyEffects(); save(); render(true);
       app.onEvent('contentSafeAreaChanged', safeAreas);
     }
     if (app.BackButton) {
-      const updateBack = () => libraryOpen || !$('help').hidden ? app.BackButton.show() : app.BackButton.hide();
-      app.BackButton.onClick(() => {
-        if (!$('help').hidden) setHelp(false);
-        else if (libraryOpen) toggleLibrary(false);
-      });
+      const updateBack = () => libraryOpen || overlayOpen || window.WordflowProfile?.isOpen() || !$('help').hidden ? app.BackButton.show() : app.BackButton.hide();
+      app.BackButton.onClick(handleBack);
+      new MutationObserver(updateBack).observe(document.body,{attributes:true,attributeFilter:['class']});
+      window.addEventListener('wordflow:viewchange',updateBack);
       new MutationObserver(updateBack).observe($('library'), {attributes:true, attributeFilter:['hidden']});
       new MutationObserver(updateBack).observe($('help'), {attributes:true, attributeFilter:['hidden']});
       updateBack();
@@ -2028,7 +2074,7 @@ applyEffects(); save(); render(true);
 <script>
 /* A portable backup moves browser-local words and progress into Telegram. */
 (() => {
-  const keys = [CUSTOM_KEY, STORAGE_KEY, COLLECTIONS_KEY, PREFS_KEY];
+  const keys = [CUSTOM_KEY, STORAGE_KEY, COLLECTIONS_KEY, PREFS_KEY, ACTIVITY_KEY];
   let pending = null;
   $('library').insertAdjacentHTML('beforeend', `
     <details class="backup-tools" id="word-transfer">
@@ -2050,69 +2096,25 @@ applyEffects(); save(); render(true);
       </div>
     </details>`);
 
-  function snapshot() {
-    collectionSessions[activeCollectionId] = state;
-    return {
-      format:'wordflow-backup', version:1, exportedAt:new Date().toISOString(),
-      builtinWords:WORDS.slice(0, BUILTIN_COUNT).map(word => word.en),
-      customWords:WORDS.slice(BUILTIN_COUNT).map(({en,ru,ipa}) => ({en,ru,ipa})),
-      session:collectionSessions.all,
-      collections:{items:collections, activeId:activeCollectionId,
-        sessions:Object.fromEntries(collections.map(item => [item.id, collectionSessions[item.id]]))},
-      preferences:{effects:effectsEnabled, shortcuts:shortcutsEnabled}
-    };
-  }
-
-  function validateBackup(data) {
-    const fail = () => { throw new Error('Файл не подходит. Выберите копию, сохранённую в Wordflow.'); };
-    if (!data || data.format !== 'wordflow-backup' || data.version !== 1 ||
-        !Array.isArray(data.builtinWords) || data.builtinWords.length !== BUILTIN_COUNT ||
-        data.builtinWords.some((word, i) => word !== WORDS[i].en)) fail();
-    if (!Array.isArray(data.customWords) || data.customWords.length > 500) fail();
-    const words = data.customWords.map(word => {
-      if (!word || typeof word.en !== 'string' || typeof word.ru !== 'string' ||
-          !word.en.trim() || !word.ru.trim() || word.en.length > 80 || word.ru.length > 120 ||
-          (word.ipa !== undefined && (typeof word.ipa !== 'string' || word.ipa.length > 250))) fail();
-      return {en:word.en.trim(), ru:word.ru.trim(), ipa:word.ipa?.trim() || transcriptionFor(word.en)};
-    });
-    const allIds = Array.from({length:BUILTIN_COUNT + words.length}, (_, i) => i);
-    const names = [...data.builtinWords, ...words.map(word => word.en)].map(name => name.toLocaleLowerCase('en'));
-    if (new Set(names).size !== names.length) fail();
-    function session(value, ids) {
-      if (!value || !Array.isArray(value.queue) || !Array.isArray(value.learned) || !Array.isArray(value.difficult)) fail();
-      const validIds = list => Array.isArray(list) && new Set(list).size === list.length && list.every(id => Number.isInteger(id) && ids.includes(id));
-      const all = [...value.queue, ...value.learned];
-      if (!validIds(all) || all.length !== ids.length || !validIds(value.difficult) ||
-          (value.hinted !== undefined && (!validIds(value.hinted) || value.hinted.some(id => !value.queue.includes(id) || !value.difficult.includes(id)))) ||
-          !Number.isSafeInteger(value.attempts) || value.attempts < value.learned.length) fail();
-      return reconcileSession(value, ids);
-    }
-    const stored = data.collections;
-    if (!stored || !Array.isArray(stored.items) || stored.items.length > 1000 || !stored.sessions || typeof stored.sessions !== 'object') fail();
-    const seen = new Set();
-    const items = stored.items.map(item => {
-      if (!item || typeof item.id !== 'string' || !/^deck-[a-z0-9-]+$/.test(item.id) || seen.has(item.id) ||
-          typeof item.name !== 'string' || !item.name.trim() || item.name.length > 50 ||
-          !Array.isArray(item.wordIds) || new Set(item.wordIds).size !== item.wordIds.length ||
-          item.wordIds.some(id => !Number.isInteger(id) || !allIds.includes(id))) fail();
-      seen.add(item.id);
-      return {id:item.id, name:item.name.trim(), wordIds:item.wordIds};
-    });
-    if (stored.activeId !== 'all' && !seen.has(stored.activeId)) fail();
-    const sessions = Object.fromEntries(items.map(item => [item.id, session(stored.sessions[item.id], item.wordIds)]));
-    if (!data.preferences || typeof data.preferences.effects !== 'boolean' || typeof data.preferences.shortcuts !== 'boolean') fail();
-    return {
-      [CUSTOM_KEY]:JSON.stringify(words),
-      [STORAGE_KEY]:JSON.stringify(session(data.session, allIds)),
-      [COLLECTIONS_KEY]:JSON.stringify({items, activeId:stored.activeId, sessions}),
-      [PREFS_KEY]:JSON.stringify({effects:data.preferences.effects, shortcuts:data.preferences.shortcuts})
-    };
-  }
+  function snapshot() {return documentSnapshot();}
+  function validateBackup(data) {return Model.valuesFromDocument(Model.normalizeDocument(data,Date.now()));}
 
   // The hosted profile layer reuses the same portable data and validation.
-  window.WordflowData = {snapshot, validateBackup,
-    closeViews() { if (libraryOpen) toggleLibrary(false); if (!$('help').hidden) setHelp(false, false); stopSpeech(); },
-    notify: toast};
+  window.WordflowData={snapshot,validateBackup,
+    getWeeklyStats(now=Date.now()){return Activity.summarizeWeek(activity,now);},
+    openWordByKey(key,trigger){const word=WORDS.find(item=>item.key===key);if(word)libraryController?.openWord(word.id,trigger||document.activeElement);},
+    closeOverlays(){return libraryController?.closeOverlay()||false;},
+    closeViews(){libraryController?.closeOverlay();settleScreenTransition();libraryOpen=false;showCurrentScreen();updateControls();if(!$('help').hidden)setHelp(false,false);stopSpeech();},handleBack,notify:toast};
+  libraryController=window.WordflowLibrary.mount({
+    snapshot:documentSnapshot,words:()=>WORDS,getBrowsingCollectionId:()=>window.WordflowProfile?.isOpen()?'all':browsingCollectionId,commitDocument,transcriptionFor,
+    speakWord:(id,button)=>{if(WORDS[id]){void lookupRecording(WORDS[id]);speak(button,WORDS[id]);}},
+    studyCollection,selectCollection,createCollection:()=>editCollection(),renameCollection:()=>editCollection(true),
+    showLibrary(open){if(libraryOpen===open)return;libraryOpen=open;showCurrentScreen();updateControls();if(open){setFlipped(false,false,false);setHelp(false,false);}window.dispatchEvent(new Event('wordflow:viewchange'));},
+    notify:toast,stopSpeech,isBusy:()=>busy||navigationPending,
+    getWordStatus(id,deckId){const s=collectionSessions[deckId];return s?.learned.includes(id)?'learned':s?.difficult.includes(id)?'review':'new';},
+    setOverlayOpen(open){overlayOpen=open;updateControls();window.dispatchEvent(new Event('wordflow:viewchange'));}
+  });
+  if(libraryOpen)libraryController.openOverview();
 
   $('export-backup').addEventListener('click', () => {
     try {
@@ -2149,17 +2151,9 @@ applyEffects(); save(); render(true);
   });
   $('apply-backup').addEventListener('click', () => {
     if (!pending) return;
-    const old = Object.create(null);
-    try {
-      keys.forEach(key => { old[key] = localStorage.getItem(key); });
-      // Keep a recovery copy in this same browser before replacing any data.
-      localStorage.setItem('wordflow.backup.previous.v1', JSON.stringify(old));
-      keys.forEach(key => localStorage.setItem(key, pending[key]));
-    } catch {
-      keys.forEach(key => { if (Object.hasOwn(old, key)) { try { old[key] === null ? localStorage.removeItem(key) : localStorage.setItem(key, old[key]); } catch {} } });
-      $('backup-note').textContent = 'Не удалось загрузить копию. Проверьте доступ к памяти браузера и попробуйте ещё раз.';
-      return;
-    }
+    try {persistValues(pending);}
+    catch {$('backup-note').textContent='Не удалось загрузить копию. Проверьте память устройства и попробуйте ещё раз.';return;}
+
     location.reload();
   });
 })();

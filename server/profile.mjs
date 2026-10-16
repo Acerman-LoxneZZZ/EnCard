@@ -22,7 +22,12 @@ export async function handleProfile(request,env,{verify=verifyTelegram}={}) {
     if(request.method==='PUT') {
       const input=await body(request);
       if(!Number.isSafeInteger(input.revision) || input.revision<0) throw new ApiError(400,'invalid_revision','Не удалось определить версию данных.');
-      const document=validateDocument(input.document);
+      const document=validateDocument(input.document,now);
+      // A client with the old schema must never acknowledge a save that drops
+      // stable word identities and answer history from an upgraded profile.
+      const current=await env.DB.prepare('SELECT document, revision FROM profiles WHERE telegram_id = ?').bind(user.id).first();
+      if(document.version===1 && current?.document && JSON.parse(current.document).version===2)
+        throw new ApiError(409,'update_required','Обновите приложение, чтобы сохранить слова и историю занятий. Сначала сохраните локальную копию.');
       const saved=await env.DB.prepare('UPDATE profiles SET document = ?, revision = revision + 1, updated_at = ? WHERE telegram_id = ? AND revision = ? RETURNING revision, updated_at').bind(JSON.stringify(document),now,user.id,input.revision).first();
       if(!saved) return json({error:'conflict',message:'На другом устройстве появились изменения.'},409);
       return json({revision:saved.revision,updatedAt:saved.updated_at});
