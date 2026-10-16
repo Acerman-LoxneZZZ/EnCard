@@ -87,7 +87,7 @@
       wordList.querySelector(`[data-word-id="${word?.id}"] .word-row-edit`)?.focus({preventScroll:true});
     });
     undoDelete.id = 'undo-delete-word';
-    undoBar.append(undoLabel, undoDelete); wordList.before(undoBar);
+    undoBar.append(undoLabel, undoDelete); document.body.append(undoBar);
 
     const dialog = element('dialog', 'word-panel');
     dialog.id = 'word-panel';
