@@ -84,7 +84,7 @@
       clearDeleteUndo();
       adapter.notify(`Слово «${pending.en}» восстановлено.`);
       const word = words().find(item => item.key === pending.key);
-      wordList.querySelector(`[data-word-id="${word?.id}"] .word-row-edit`)?.focus({preventScroll:true});
+      wordList.querySelector(`[data-word-id="${word?.id}"] .word-row-edit, [data-word-id="${word?.id}"] .word-row-delete`)?.focus({preventScroll:true});
     });
     undoDelete.id = 'undo-delete-word';
     undoBar.append(undoLabel, undoDelete); document.body.append(undoBar);
@@ -197,13 +197,15 @@
           row.append(open);
         }
         open.setAttribute('aria-label', `Открыть слово ${word.en}`);
-        if (word.id >= builtinCount && !row.querySelector('.word-row-actions')) {
+        if (!row.querySelector('.word-row-actions')) {
           const actions = element('div', 'word-row-actions');
-          const edit = button('Редактировать', 'word-row-edit', () => openInlineEdit(word.key));
-          edit.setAttribute('aria-label', `Редактировать слово ${word.en}`);
-          const remove = button('Удалить', 'word-row-delete', () => deleteWordNow(word.id));
+          if (word.id >= builtinCount) {
+            const edit = button('Редактировать', 'word-row-edit', () => openInlineEdit(word.key));
+            edit.setAttribute('aria-label', `Редактировать слово ${word.en}`); actions.append(edit);
+          }
+          const remove = button('Удалить', 'word-row-delete', () => requestDelete(word.id, remove));
           remove.setAttribute('aria-label', `Удалить слово ${word.en}`);
-          actions.append(edit, remove); row.append(actions);
+          actions.append(remove); row.append(actions);
         }
         // Removal remains available in the focused word panel, reducing competing row actions.
         const oldRemove = row.querySelector('.remove-membership');
@@ -229,6 +231,10 @@
     }
     function clearDeleteUndo() { lastDeleted = null; undoBar.hidden = true; }
     window.addEventListener('wordflow:datachange', clearDeleteUndo);
+    function requestDelete(id, source) {
+      if (!wordById(id) || adapter.isBusy?.()) return;
+      currentWordId = id; showDialog('Удалить слово?', source); renderDelete();
+    }
     function deleteWordNow(id) {
       const word = wordById(id);
       if (!word || adapter.isBusy?.()) return false;
@@ -388,10 +394,8 @@
         const remove = button('Убрать из этого словаря', 'text-action', () => removeMembership(word.id));
         remove.id = 'panel-remove-membership'; more.append(remove);
       }
-      if (own) {
-        const remove = button('Удалить слово', 'text-action word-panel-danger', () => renderDelete());
-        remove.id = 'panel-delete-word'; more.append(remove);
-      }
+      const remove = button('Удалить слово', 'text-action word-panel-danger', () => renderDelete());
+      remove.id = 'panel-delete-word'; more.append(remove);
       dialogContent.replaceChildren(intro, status, actions, more);
     }
     function renderEdit() {
@@ -431,7 +435,7 @@
       const actions = element('div', 'word-panel-actions');
       const remove = button('Удалить слово', 'word-delete-confirm', () => deleteWordNow(word.id));
       remove.id = 'confirm-delete-word';
-      const cancel = button('Отмена', 'secondary-action', () => { renderWord(); dialogTitle.focus({preventScroll: true}); });
+      const cancel = button('Отмена', 'secondary-action', () => closeOverlay());
       actions.append(cancel, remove); dialogContent.replaceChildren(text, actions); cancel.focus();
     }
     function removeMembership(id) {

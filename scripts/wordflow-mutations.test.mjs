@@ -29,9 +29,31 @@ test('changing English resets only that word in every containing deck and clears
   for(const s of [next.session,...Object.values(next.collections.sessions)])assert.deepEqual([s.attempts,s.streak,s.bestStreak],[7,2,4]);
   assert.deepEqual(next.activity,d.activity);
 });
-test('mutations reject builtins, invalid edits and case-insensitive duplicate words',()=>{
-  for(const id of [0,-1,23]) {assert.throws(()=>M.editWord(document(),id,{en:'x',ru:'x'},()=>''),{code:'invalid_document'});assert.throws(()=>M.deleteWord(document(),id),{code:'invalid_document'});}
+test('mutations reject builtin edits, invalid ids and case-insensitive duplicate words',()=>{
+  for(const id of [0,-1,23]) assert.throws(()=>M.editWord(document(),id,{en:'x',ru:'x'},()=>''),{code:'invalid_document'});
+  for(const id of [-1,23]) assert.throws(()=>M.deleteWord(document(),id),{code:'invalid_document'});
   for(const patch of [{en:'',ru:'x'},{en:'x',ru:' '},{en:'x'.repeat(81),ru:'x'},{en:'x',ru:'x'.repeat(121)},{en:'ALPHA',ru:'x'},{en:'DISCOVER',ru:'x'}])assert.throws(()=>M.editWord(document(),21,patch,()=>''),{code:'invalid_document'});
+});
+test('deleting starters keeps numeric slots, other progress, history and backup round trips',()=>{
+  const d=document();d.collections.items[0].wordIds.push(0);d.collections.sessions['deck-a'].queue.push(0);
+  d.activity.events=[{id:'starter-answer',at:now,date:new Date(now).toISOString().slice(0,10),wordKey:'builtin:discover',en:'discover',ru:'открывать',kind:'hard'}];
+  const original=structuredClone(d),next=M.deleteWord(d,0);
+  assert.deepEqual(d,original);assert.deepEqual(next.collections.deletedBuiltinIds,[0]);
+  assert.deepEqual(next.customWords,d.customWords);assert.deepEqual(next.session.learned,[20,21]);
+  assert.deepEqual(next.session.queue,d.session.queue.filter(id=>id!==0));
+  assert.deepEqual(next.collections.items[0].wordIds,[20,21,22]);assert.deepEqual(next.collections.sessions['deck-a'].queue,[22]);
+  assert.deepEqual(next.activity,d.activity);assert.deepEqual(M.normalizeDocument(JSON.parse(JSON.stringify(next)),now),next);
+  assert.deepEqual(JSON.parse(M.valuesFromDocument(next)[M.DATA_KEYS[2]]).deletedBuiltinIds,[0]);
+  for(const action of [()=>M.deleteWord(next,0),()=>M.repeatWord(next,0,'all'),()=>M.addWordsToCollections(next,[0],['deck-a'])])assert.throws(action,{code:'invalid_document'});
+  const replaced=M.editWord(next,21,{en:'DISCOVER',ru:'заново'},()=>'/new/').document;
+  assert.equal(replaced.customWords[1].key,'legacy:bravo');assert.doesNotThrow(()=>M.validateDocument(replaced,now));
+  const afterCustom=M.deleteWord(next,21);assert.deepEqual(afterCustom.collections.deletedBuiltinIds,[0]);assert.equal(afterCustom.customWords[1].en,'charlie');assert.doesNotThrow(()=>M.validateDocument(afterCustom,now));
+});
+test('all starters may be deleted, while corrupt flags or resurrected queues are rejected',()=>{
+  let d=document();for(let id=0;id<20;id++)d=M.deleteWord(d,id);
+  assert.deepEqual(d.session.queue,[22]);assert.deepEqual(d.session.learned,[20,21]);assert.doesNotThrow(()=>M.validateDocument(d,now));
+  for(const flags of [[0,0],[-1],[20],['0'],null]){const broken=document();broken.collections.deletedBuiltinIds=flags;assert.throws(()=>M.validateDocument(broken,now),{code:'invalid_document'});}
+  const broken=M.deleteWord(document(),0);broken.session.queue.push(0);assert.throws(()=>M.validateDocument(broken,now),{code:'invalid_document'});
 });
 test('bulk addition is additive and idempotent and queues only newly added members',()=>{
   const d=document(),next=M.addWordsToCollections(d,[20,20,22],['deck-b','deck-b']);

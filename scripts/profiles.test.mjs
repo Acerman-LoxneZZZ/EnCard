@@ -139,6 +139,20 @@ test('an old v1 save cannot downgrade a v2 profile or advance its revision',asyn
     const own=await (await handleProfile(request('GET'),env,{verify})).json();assert.equal(own.revision,1);assert.deepEqual(own.document,data);
   } finally {DB.close();}
 });
+test('starter deletion syncs and old v2 clients cannot drop its metadata; explicit undo is accepted',async()=>{
+  const DB=database(),env={DB,TELEGRAM_BOT_ID:botId},original=documentV2();
+  const data=globalThis.WordflowModel.deleteWord(original,0);
+  try {
+    assert.equal((await handleProfile(request('PUT',123,{revision:0,document:data}),env,{verify})).status,200);
+    const stale=await handleProfile(request('PUT',123,{revision:1,document:original}),env,{verify});
+    assert.equal(stale.status,409);assert.equal((await stale.json()).error,'update_required');
+    const saved=await (await handleProfile(request('GET'),env,{verify})).json();assert.equal(saved.revision,1);assert.deepEqual(saved.document,data);
+    assert.equal(valuesMatchDocument(valuesFromDocument(data),original),false);
+    original.collections.deletedBuiltinIds=[];
+    assert.equal((await handleProfile(request('PUT',123,{revision:1,document:original}),env,{verify})).status,200);
+    const restored=await (await handleProfile(request('GET'),env,{verify})).json();assert.equal(restored.revision,2);assert.deepEqual(restored.document,original);
+  } finally {DB.close();}
+});
 
 test('identity and activity-only edits stay dirty through conflicts and old acknowledgements',()=>{
   const sent=documentV2(),current=structuredClone(sent);current.activity.events=[];

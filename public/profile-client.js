@@ -94,7 +94,7 @@ function updateWeeklyStats(data) {
   limit.textContent=stats.truncationReason==='count'?'Показана часть истории: учтены последние 5000 ответов.':'Показана часть истории: достигнут лимит хранения.';
   const list=element('profile-difficult-words');list.replaceChildren();
   element('profile-difficult-heading').hidden=stats.difficultWords.length===0;
-  const existing=new Set(data.builtinWords.map((en,id)=>window.WordflowModel.wordKey(data,id)));
+  const existing=new Set(data.builtinWords.flatMap((en,id)=>data.collections.deletedBuiltinIds?.includes(id)?[]:[window.WordflowModel.wordKey(data,id)]));
   data.customWords.forEach((word,index)=>existing.add(window.WordflowModel.wordKey(data,data.builtinWords.length+index)));
   stats.difficultWords.forEach(word=>{
     const item=document.createElement('li'),body=document.createElement(existing.has(word.wordKey)?'button':'div');body.className='profile-difficult-word';

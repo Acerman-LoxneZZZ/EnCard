@@ -16,7 +16,7 @@ export function valuesMatchDocument(values,document) {
       const prefs=JSON.parse(values[DATA_KEYS[3]] || '{"effects":true,"shortcuts":true}');
       const activity=values[DATA_KEYS[4]] ? JSON.parse(values[DATA_KEYS[4]]) : null;
       return {custom:custom.map(w=>({key:w.key || legacyKey(w.en),en:w.en,ru:w.ru,ipa:w.ipa || ''})),session:session(JSON.parse(values[DATA_KEYS[1]] || '{}')),
-        collections:{items:decks.items,activeId:decks.activeId,sessions:Object.fromEntries(Object.entries(decks.sessions).map(([id,s])=>[id,session(s)]))},
+        collections:{items:decks.items,activeId:decks.activeId,deletedBuiltinIds:decks.deletedBuiltinIds || [],sessions:Object.fromEntries(Object.entries(decks.sessions).map(([id,s])=>[id,session(s)]))},
         preferences:{effects:prefs.effects,shortcuts:prefs.shortcuts},activity:activity || {events:[],truncated:false}};
     };
     const local=project(values),other=project(valuesFromDocument(document));

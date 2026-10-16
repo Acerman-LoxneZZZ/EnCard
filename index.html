@@ -875,7 +875,7 @@ function transcriptionFor(text) {
 
 // Words have one canonical record; dictionaries store only their IDs.
 function collectionWordIds(id = activeCollectionId) {
-  return id === 'all' ? WORDS.map(word => word.id) : (collections.find(item => item.id === id)?.wordIds || []);
+  return id === 'all' ? WORDS.filter(word => !deletedBuiltinIds.includes(word.id)).map(word => word.id) : (collections.find(item => item.id === id)?.wordIds || []);
 }
 function collectionName(id) {
   return id === 'all' ? 'Общий словарь' : (collections.find(item => item.id === id)?.name || 'Словарь');
@@ -892,7 +892,7 @@ function reconcileSession(saved, ids) {
     bestStreak: Math.max(0, Number.isSafeInteger(saved.bestStreak) ? saved.bestStreak : 0, Number.isSafeInteger(saved.streak) ? saved.streak : 0)};
 }
 function writeCollections(items = collections, sessions = collectionSessions, active = activeCollectionId) {
-  localStorage.setItem(COLLECTIONS_KEY, JSON.stringify({items, activeId: active,
+  localStorage.setItem(COLLECTIONS_KEY, JSON.stringify({items, activeId: active, deletedBuiltinIds,
     sessions: Object.fromEntries(items.map(item => [item.id, sessions[item.id]]))}));
 }
 function commitCollections(next) {
@@ -948,7 +948,7 @@ function openWordPicker() {
 }
 function renderWordPicker() {
   const query = $('picker-search').value.trim().toLocaleLowerCase('ru'), members = collectionWordIds(browsingCollectionId);
-  const available = WORDS.filter(word => !members.includes(word.id) && `${word.en} ${word.ru}`.toLocaleLowerCase('ru').includes(query));
+  const available = WORDS.filter(word => !deletedBuiltinIds.includes(word.id) && !members.includes(word.id) && `${word.en} ${word.ru}`.toLocaleLowerCase('ru').includes(query));
   $('picker-list').replaceChildren(...available.map(word => {
     const li = document.createElement('li'), label = document.createElement('label'), input = document.createElement('input');
     input.type = 'checkbox'; input.value = word.id; input.checked = pickerSelection.has(word.id);
@@ -1006,7 +1006,7 @@ function initCollections() {
     if (Array.isArray(saved?.items)) collections = saved.items.filter(item => {
       if (!item || typeof item.id !== 'string' || !/^deck-[a-z0-9-]+$/.test(item.id) || seen.has(item.id) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 50 || !Array.isArray(item.wordIds)) return false;
       seen.add(item.id); return true;
-    }).map(item => ({id: item.id, name: item.name.trim(), wordIds: [...new Set(item.wordIds.filter(id => Number.isInteger(id) && !!WORDS[id]))]}));
+    }).map(item => ({id: item.id, name: item.name.trim(), wordIds: [...new Set(item.wordIds.filter(id => Number.isInteger(id) && !!WORDS[id] && !deletedBuiltinIds.includes(id)))]}));
     collections.forEach(item => collectionSessions[item.id] = reconcileSession(saved?.sessions?.[item.id], item.wordIds));
     if (collections.some(item => item.id === saved?.activeId)) activeCollectionId = saved.activeId;
   } catch { /* Старые слова и общий прогресс доступны без новых сохранений. */ }
@@ -1185,9 +1185,14 @@ try {
   activity = Activity.emptyActivity(Date.now());
 }
 let collections = [], collectionSessions = Object.create(null), activeCollectionId = 'all', browsingCollectionId = 'all', editingCollectionId = null;
+let deletedBuiltinIds = [];
 const pickerSelection = new Set();
 const BUILTIN_COUNT = WORDS.length;
 WORDS.forEach(word => word.key = 'builtin:' + word.en);
+try {
+  const deleted = JSON.parse(localStorage.getItem(COLLECTIONS_KEY))?.deletedBuiltinIds;
+  if (Array.isArray(deleted) && new Set(deleted).size === deleted.length && deleted.every(id => Number.isInteger(id) && id >= 0 && id < BUILTIN_COUNT)) deletedBuiltinIds = deleted;
+} catch { /* Старые сохранения содержат все стартовые слова. */ }
 try {
   const custom = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
   if (Array.isArray(custom)) custom.slice(0, 500).forEach(item => {
@@ -1225,8 +1230,9 @@ window.addEventListener('resize', updateViewportWidth, {passive:true});
 function validState(s) {
   if (!s || !Array.isArray(s.queue) || !Array.isArray(s.learned) || !Array.isArray(s.difficult)) return false;
   const all = [...s.queue, ...s.learned];
-  return all.length === WORDS.length && new Set(all).size === WORDS.length &&
-    [...all, ...s.difficult].every(n => Number.isInteger(n) && n >= 0 && n < WORDS.length) &&
+  const activeIds = new Set(collectionWordIds('all'));
+  return all.length === activeIds.size && new Set(all).size === activeIds.size &&
+    [...all, ...s.difficult].every(n => Number.isInteger(n) && activeIds.has(n)) &&
     new Set(s.difficult).size === s.difficult.length && Number.isSafeInteger(s.attempts) && s.attempts >= s.learned.length &&
     (s.hinted === undefined || (Array.isArray(s.hinted) && new Set(s.hinted).size === s.hinted.length && s.hinted.every(id => s.queue.includes(id) && s.difficult.includes(id))));
 }
@@ -1250,7 +1256,7 @@ function documentSnapshot() {
     builtinWords:WORDS.slice(0,BUILTIN_COUNT).map(word => word.en),
     customWords:WORDS.slice(BUILTIN_COUNT).map(({key,en,ru,ipa}) => ({key,en,ru,ipa})),
     session:collectionSessions.all,
-    collections:{items:collections,activeId:activeCollectionId,sessions:Object.fromEntries(collections.map(item => [item.id,collectionSessions[item.id]]))},
+    collections:{items:collections,activeId:activeCollectionId,deletedBuiltinIds:[...deletedBuiltinIds],sessions:Object.fromEntries(collections.map(item => [item.id,collectionSessions[item.id]]))},
     preferences:{effects:effectsEnabled,shortcuts:shortcutsEnabled},activity
   },Date.now(),previousEventId);
 }
@@ -1275,6 +1281,7 @@ function applyDocument(next) {
   });
   WORDS.splice(BUILTIN_COUNT,WORDS.length-BUILTIN_COUNT,...custom);
   collections = next.collections.items;
+  deletedBuiltinIds = [...(next.collections.deletedBuiltinIds || [])];
   collectionSessions = Object.assign(Object.create(null),{all:next.session},next.collections.sessions);
   activeCollectionId = next.collections.activeId;
   if (browsingCollectionId !== 'all' && !collections.some(item => item.id===browsingCollectionId)) browsingCollectionId='all';
@@ -1750,7 +1757,7 @@ function addWord(event) {
   event.preventDefault();
   const en=$('custom-en').value.trim().replace(/\s+/g,' '),ru=$('custom-ru').value.trim().replace(/\s+/g,' ');
   if(!en||!ru||en.length>80||ru.length>120)return;
-  const existing=WORDS.find(word=>word.en.toLowerCase()===en.toLowerCase());
+  const existing=WORDS.find(word=>!deletedBuiltinIds.includes(word.id)&&word.en.toLowerCase()===en.toLowerCase());
   if(existing){
     if(browsingCollectionId!=='all'&&!collectionWordIds(browsingCollectionId).includes(existing.id)){
       if(attachWords([existing.id])){renderLibrary();$('add-word-form').reset();toast('Существующее слово добавлено в этот словарь.');}
@@ -1825,7 +1832,7 @@ function addWordList(event) {
   event.preventDefault();
   const {entries,errors}=parseWordList($('bulk-words').value);
   if(errors.length){showBulkError(errors.slice(0,3).join('\n')+(errors.length>3?'\nДругих ошибок: '+(errors.length-3)+'.':''));return;}
-  const next=documentSnapshot(),known=new Map(WORDS.map(word=>[word.en.toLowerCase(),word.id])),ids=new Set();
+  const next=documentSnapshot(),known=new Map(WORDS.filter(word=>!deletedBuiltinIds.includes(word.id)).map(word=>[word.en.toLowerCase(),word.id])),ids=new Set();
   entries.forEach(({en,ru})=>{
     const spelling=en.toLowerCase();
     if(!known.has(spelling)){const id=BUILTIN_COUNT+next.customWords.length;known.set(spelling,id);next.customWords.push({key:Model.createWordKey(),en,ru,ipa:transcriptionFor(en)});next.session.queue.push(id);}
@@ -2102,11 +2109,11 @@ if(activityRecoveryWarning)toast(activityRecoveryFailed?'Не удалось с�
   // The hosted profile layer reuses the same portable data and validation.
   window.WordflowData={snapshot,validateBackup,
     getWeeklyStats(now=Date.now()){return Activity.summarizeWeek(activity,now);},
-    openWordByKey(key,trigger){const word=WORDS.find(item=>item.key===key);if(word)libraryController?.openWord(word.id,trigger||document.activeElement);},
+    openWordByKey(key,trigger){const word=WORDS.find(item=>!deletedBuiltinIds.includes(item.id)&&item.key===key);if(word)libraryController?.openWord(word.id,trigger||document.activeElement);},
     closeOverlays(){return libraryController?.closeOverlay()||false;},
     closeViews(){libraryController?.closeOverlay();settleScreenTransition();libraryOpen=false;showCurrentScreen();updateControls();if(!$('help').hidden)setHelp(false,false);stopSpeech();},handleBack,notify:toast};
   libraryController=window.WordflowLibrary.mount({
-    snapshot:documentSnapshot,words:()=>WORDS,getBrowsingCollectionId:()=>window.WordflowProfile?.isOpen()?'all':browsingCollectionId,commitDocument,transcriptionFor,
+    snapshot:documentSnapshot,words:()=>WORDS.filter(word=>!deletedBuiltinIds.includes(word.id)),getBrowsingCollectionId:()=>window.WordflowProfile?.isOpen()?'all':browsingCollectionId,commitDocument,transcriptionFor,
     speakWord:(id,button)=>{if(WORDS[id]){void lookupRecording(WORDS[id]);speak(button,WORDS[id]);}},
     studyCollection,selectCollection,createCollection:()=>editCollection(),renameCollection:()=>editCollection(true),
     showLibrary(open){if(libraryOpen===open)return;libraryOpen=open;showCurrentScreen();updateControls();if(open){setFlipped(false,false,false);setHelp(false,false);}window.dispatchEvent(new Event('wordflow:viewchange'));},

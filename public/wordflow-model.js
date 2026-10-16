@@ -96,10 +96,14 @@
       }
       return result;
     });
-    const names = [...BUILTIN_WORDS, ...customWords.map(word => word.en)].map(word => word.toLowerCase());
-    if (new Set(names).size !== names.length) fail();
-    const ids = names.map((_word, index) => index), allowed = new Set(ids), decks = input.collections;
+    const decks = input.collections;
     if (!object(decks) || !Array.isArray(decks.items) || decks.items.length > 1000 || !object(decks.sessions)) fail();
+    const deleted = own(decks,'deletedBuiltinIds') ? decks.deletedBuiltinIds : [];
+    if (!idList(deleted,new Set(BUILTIN_WORDS.map((_word,index) => index))) || (input.version === 1 && deleted.length)) fail();
+    const names = [...BUILTIN_WORDS.filter((_word,index) => !deleted.includes(index)), ...customWords.map(word => word.en)].map(word => word.toLowerCase());
+    if (new Set(names).size !== names.length) fail();
+    // Keep built-in numeric slots stable so deleting a starter never changes another word's identity.
+    const ids = Array.from({length:BUILTIN_COUNT+customWords.length},(_word,index) => index).filter(id => !deleted.includes(id)), allowed = new Set(ids);
     const seen = new Set(), entries = [];
     const items = decks.items.map(item => {
       if (!object(item) || typeof item.id !== 'string' || !/^deck-[a-z0-9-]{1,100}$/.test(item.id) || seen.has(item.id) ||
@@ -113,6 +117,7 @@
       session:validateSession(input.session,ids),collections:{items,activeId:decks.activeId,sessions:Object.fromEntries(entries)},
       preferences:{effects:input.preferences.effects,shortcuts:input.preferences.shortcuts}};
     if (input.version === 2) result.activity = validateActivity(input.activity,now);
+    if (input.version === 2 && own(decks,'deletedBuiltinIds')) result.collections.deletedBuiltinIds = [...deleted];
     checkSize(result); return result;
   }
   function normalizeDocument(input, now = Date.now()) {
@@ -133,7 +138,7 @@
       ...(document.version === 2 ? [document.activity] : [])].map((value,index) => [DATA_KEYS[index],JSON.stringify(value)]));
   }
   function wordKey(document, id) {
-    if (!Number.isInteger(id) || id < 0 || id >= BUILTIN_COUNT + document.customWords.length) fail();
+    if (!Number.isInteger(id) || id < 0 || id >= BUILTIN_COUNT + document.customWords.length || document.collections.deletedBuiltinIds?.includes(id)) fail();
     return id < BUILTIN_COUNT ? `builtin:${BUILTIN_WORDS[id]}` : document.customWords[id-BUILTIN_COUNT].key;
   }
   function createWordKey() {
@@ -148,7 +153,7 @@
     const document = normalizeDocument(input), index = customIndex(document,wordId), old = document.customWords[index];
     if (!object(patch) || typeof patch.en !== 'string' || !patch.en.trim() || patch.en.length > 80 || typeof patch.ru !== 'string' || !patch.ru.trim() || patch.ru.length > 120) fail('Введите слово до 80 символов и перевод до 120 символов.');
     const en = patch.en.trim(), ru = patch.ru.trim(), normalized = en.toLowerCase();
-    if (BUILTIN_WORDS.includes(normalized) || document.customWords.some((word,i) => i !== index && word.en.toLowerCase() === normalized)) fail('Такое английское слово уже есть в общем словаре.');
+    if (BUILTIN_WORDS.some((en,id) => en === normalized && !document.collections.deletedBuiltinIds?.includes(id)) || document.customWords.some((word,i) => i !== index && word.en.toLowerCase() === normalized)) fail('Такое английское слово уже есть в общем словаре.');
     const resetProgress = normalized !== old.en.toLowerCase();
     const word = {...old,en,ru};
     if (resetProgress) {
@@ -165,10 +170,13 @@
     return {document,resetProgress};
   }
   function deleteWord(input, wordId) {
-    const document = normalizeDocument(input), index = customIndex(document,wordId);
-    const remap = list => list.filter(id => id !== wordId).map(id => id > wordId ? id - 1 : id);
+    const document = normalizeDocument(input); wordKey(document,wordId);
+    const builtin = wordId < BUILTIN_COUNT;
+    const remap = list => list.filter(id => id !== wordId).map(id => !builtin && id > wordId ? id - 1 : id);
     const session = value => ({...value,queue:remap(value.queue),learned:remap(value.learned),difficult:remap(value.difficult),hinted:remap(value.hinted)});
-    document.customWords.splice(index,1); document.session = session(document.session);
+    if (builtin) document.collections.deletedBuiltinIds = [...(document.collections.deletedBuiltinIds || []),wordId];
+    else document.customWords.splice(wordId-BUILTIN_COUNT,1);
+    document.session = session(document.session);
     for (const item of document.collections.items) {
       item.wordIds = remap(item.wordIds); document.collections.sessions[item.id] = session(document.collections.sessions[item.id]);
     }
@@ -176,7 +184,7 @@
   }
   function addWordsToCollections(input, wordIds, collectionIds) {
     const document = normalizeDocument(input), count = BUILTIN_COUNT + document.customWords.length;
-    if (!Array.isArray(wordIds) || wordIds.some(id => !Number.isInteger(id) || id < 0 || id >= count) || !Array.isArray(collectionIds)) fail();
+    if (!Array.isArray(wordIds) || wordIds.some(id => !Number.isInteger(id) || id < 0 || id >= count || document.collections.deletedBuiltinIds?.includes(id)) || !Array.isArray(collectionIds)) fail();
     const targets = new Set(collectionIds), words = [...new Set(wordIds)];
     if ([...targets].some(id => !document.collections.items.some(item => item.id === id))) fail();
     for (const item of document.collections.items) if (targets.has(item.id)) {
